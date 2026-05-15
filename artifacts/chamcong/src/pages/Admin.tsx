@@ -575,7 +575,7 @@ function JobApplicationsTab() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Trạng thái</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Họ tên</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Người GT</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">STK NH</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">STK NH người GT</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày nộp</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">CCCD</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">Thao tác</th>
@@ -600,7 +600,7 @@ function JobApplicationsTab() {
                         {app.referrer_name || "—"}
                         {app.referrer_id && <span className="block text-muted-foreground/60">{app.referrer_id}</span>}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">{app.bank_account}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-foreground">{app.referrer_bank_account || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {new Date(app.created_at).toLocaleDateString("vi-VN")}
                       </td>

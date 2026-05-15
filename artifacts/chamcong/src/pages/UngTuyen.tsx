@@ -84,7 +84,6 @@ export default function UngTuyen() {
   const [referrerId, setReferrerId] = useState("");
   const [referrerBankAccount, setReferrerBankAccount] = useState("");
   const [referrerBankName, setReferrerBankName] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [frontPreview, setFrontPreview] = useState<string | null>(null);
@@ -168,7 +167,6 @@ export default function UngTuyen() {
       referrer_id: referrerId.trim(),
       referrer_bank_account: referrerBankAccount.trim(),
       referrer_bank_name: referrerBankName.trim(),
-      bank_account: bankAccount.trim(),
       cccd_front_url: frontName,
       cccd_back_url: backName,
       status: "pending",
@@ -348,27 +346,6 @@ export default function UngTuyen() {
                   value={referrerBankName}
                   onChange={e => setReferrerBankName(e.target.value)}
                   placeholder="VD: Vietcombank, Techcombank..."
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Thông tin ngân hàng */}
-          <div className="bg-white rounded-2xl shadow-sm border border-border p-5 space-y-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Banknote size={16} className="text-primary" />
-              <h2 className="font-semibold text-foreground text-sm">Thông tin ngân hàng <span className="text-muted-foreground font-normal">(để nhận lương)</span></h2>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Số tài khoản ngân hàng</label>
-              <div className="relative">
-                <Banknote size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={bankAccount}
-                  onChange={e => setBankAccount(e.target.value)}
-                  placeholder="VD: 0123456789"
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
                 />
               </div>
