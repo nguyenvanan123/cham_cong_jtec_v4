@@ -1,0 +1,59 @@
+Prompt 1: Thiết kế Database & Storage (Thực hiện trên Supabase)
+"Tôi đang xây dựng hệ thống chấm công bằng Supabase. Hãy hướng dẫn tôi tạo các bảng và phân quyền sau:
+
+Bảng attendance: Các cột id (uuid), employee_id (text), full_name (text), work_date (date), shift (text), action_type (text: check-in/out), image_url (text), created_at (timestamp).
+
+Bảng configs: Các cột id, key (text), value (text) để lưu link ảnh quảng cáo.
+
+Cấu hình Storage: Tạo một bucket tên là checkin_photos công khai (Public).
+
+Viết các chính sách RLS (Row Level Security) để cho phép mọi người insert dữ liệu nhưng chỉ Admin mới có thể delete."
+
+Prompt 2: Xây dựng file user.html (Giao diện chấm công)
+"Viết file user.html sử dụng Bootstrap 5 và thư viện @supabase/supabase-js.
+
+Giao diện mobile-first, hiện đại.
+
+Form nhập: Mã NV, Tên, Ngày làm (mặc định hôm nay), Ca làm (Dropdown), Loại (Check-in/Out).
+
+Tính năng Camera: Mở camera trực tiếp, chụp ảnh, cho phép chụp lại.
+
+Logic gửi:
+
+Upload ảnh lên Supabase Storage checkin_photos.
+
+Sau đó lưu dữ liệu vào bảng attendance.
+
+Trước khi gửi, phải kiểm tra: Nếu là Check-out thì phải có Check-in trước đó trong bảng attendance của ngày hôm đó. Nếu đã đủ cả 2 thì ngăn chặn gửi (Spam).
+
+Hiển thị banner quảng cáo lấy từ bảng configs.
+
+Có menu điều hướng sang check.html."
+
+Prompt 3: Xây dựng file check.html (Tra cứu thông tin)
+"Viết file check.html cho nhân viên tra cứu trạng thái chấm công.
+
+Người dùng nhập Mã NV và Tên.
+
+Truy vấn Supabase để lấy dữ liệu của ngày hôm nay.
+
+Hiển thị thông báo dạng Card/Popup với hiệu ứng:
+
+Màu xanh: Đã hoàn thành (Đủ in/out).
+
+Màu vàng: Thiếu bước (Báo rõ thiếu In hoặc Out).
+
+Màu đỏ: Chưa có dữ liệu.
+
+Sử dụng hiệu ứng CSS động cho chuyên nghiệp."
+
+Prompt 4: Xây dựng file admin.html (Dashboard quản trị)
+"Viết file admin.html dành cho Admin quản lý.
+
+Bảng dữ liệu: Hiển thị danh sách chấm công.
+
+Cột trạng thái: Chấm đỏ nếu thiếu In/Out, chấm xanh nếu đủ cả 2.
+
+Bộ lọc mạnh mẽ: Lọc theo mã NV, lọc theo khoảng ngày, lọc theo trạng thái xanh/đỏ.
+
+Hiển thị ảnh: Bấm vào icon ảnh để xem ảnh chụp check-in/out trong modal.
