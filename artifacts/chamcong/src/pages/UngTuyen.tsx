@@ -155,6 +155,7 @@ export default function UngTuyen() {
       referrer_id: referrerId.trim(),
       referrer_bank_account: referrerBankAccount.trim(),
       referrer_bank_name: referrerBankName.trim(),
+      bank_account: "",
       cccd_front_url: frontName,
       cccd_back_url: backName,
       status: "pending",
