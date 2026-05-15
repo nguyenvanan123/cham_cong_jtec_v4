@@ -126,22 +126,13 @@ export default function UngTuyen() {
 
     setSubmitting(true);
 
-    const isRlsError = (msg: string) =>
-      msg.toLowerCase().includes("row-level security") ||
-      msg.toLowerCase().includes("policy") ||
-      msg.toLowerCase().includes("permission") ||
-      msg.toLowerCase().includes("violates");
-
     const frontName = `${Date.now()}_front_${frontFile.name}`;
     const { error: frontErr } = await supabase.storage
       .from("application_docs")
       .upload(frontName, frontFile, { contentType: frontFile.type });
     if (frontErr) {
-      const isRls = isRlsError(frontErr.message);
-      setError(isRls
-        ? "Upload ảnh bị chặn bởi RLS. Hãy chạy SQL bên dưới để sửa."
-        : "Lỗi upload ảnh CCCD mặt trước: " + frontErr.message);
-      if (isRls) setShowSql(true);
+      setError(`[Storage - ảnh trước] ${frontErr.message}`);
+      setShowSql(true);
       setSubmitting(false);
       return;
     }
@@ -151,11 +142,8 @@ export default function UngTuyen() {
       .from("application_docs")
       .upload(backName, backFile, { contentType: backFile.type });
     if (backErr) {
-      const isRls = isRlsError(backErr.message);
-      setError(isRls
-        ? "Upload ảnh bị chặn bởi RLS. Hãy chạy SQL bên dưới để sửa."
-        : "Lỗi upload ảnh CCCD mặt sau: " + backErr.message);
-      if (isRls) setShowSql(true);
+      setError(`[Storage - ảnh sau] ${backErr.message}`);
+      setShowSql(true);
       setSubmitting(false);
       return;
     }
@@ -173,11 +161,8 @@ export default function UngTuyen() {
     });
 
     if (insertErr) {
-      const isRls = isRlsError(insertErr.message);
-      setError(isRls
-        ? "Lưu dữ liệu bị chặn bởi RLS. Hãy chạy SQL bên dưới để sửa."
-        : "Lỗi lưu dữ liệu: " + insertErr.message);
-      if (isRls) setShowSql(true);
+      setError(`[DB Insert] ${insertErr.message}`);
+      setShowSql(true);
       setSubmitting(false);
       return;
     }
