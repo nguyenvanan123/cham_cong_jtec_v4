@@ -232,6 +232,24 @@ function OverviewTab({ allRecords }: { allRecords: AttendanceRecord[] }) {
   );
 }
 
+function parseTimeMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + (m || 0);
+}
+
+function isOutsideShiftWindow(recordTime: Date, startTime: string, endTime: string): boolean {
+  const actual = recordTime.getHours() * 60 + recordTime.getMinutes();
+  const start = parseTimeMinutes(startTime);
+  const end = parseTimeMinutes(endTime);
+  const TOL = 120; // 2-hour tolerance
+  if (start <= end) {
+    return actual < start - TOL || actual > end + TOL;
+  } else {
+    // overnight shift e.g. 22:00–06:00
+    return actual < start - TOL && actual > end + TOL;
+  }
+}
+
 // ──────────────────────────────────────────────────────
 // Tab: Records
 // ──────────────────────────────────────────────────────
@@ -381,9 +399,15 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                     const images = g.records.filter(r => r.image_url).map(r => ({ url: r.image_url!, type: r.action_type }));
                     const key = `${g.employee_id}__${g.work_date}`;
                     const isDeleting = deletingKey === key;
+                    const matchedShift = dbShifts.find(s => g.shift.toLowerCase().includes(s.name.toLowerCase()));
+                    const wrongShift = matchedShift && (inRec || outRec)
+                      ? [inRec, outRec].filter(Boolean).some(
+                          r => isOutsideShiftWindow(new Date(r!.created_at), matchedShift.start_time, matchedShift.end_time)
+                        )
+                      : false;
                     return (
                       <tr key={idx} data-testid={`row-${g.employee_id}-${g.work_date}`}
-                        className="hover:bg-muted/20 transition-colors">
+                        className={`transition-colors ${wrongShift ? "bg-red-50 hover:bg-red-100/60" : "hover:bg-muted/20"}`}>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${isComplete ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${isComplete ? "bg-green-500" : "bg-red-500"}`} />
@@ -393,7 +417,16 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                         <td className="px-4 py-3 font-mono text-xs font-bold text-foreground">{g.employee_id}</td>
                         <td className="px-4 py-3 text-foreground font-medium">{g.full_name}</td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{g.work_date}</td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs max-w-[100px] truncate">{g.shift.split("(")[0].trim()}</td>
+                        <td className="px-4 py-3 text-xs max-w-[120px]">
+                          <div className="flex items-center gap-1">
+                            <span className={`truncate ${wrongShift ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
+                              {g.shift.split("(")[0].trim()}
+                            </span>
+                            {wrongShift && (
+                              <span title="Giờ chấm không khớp với ca này" className="flex-shrink-0 text-red-500 text-[10px] font-bold leading-none bg-red-100 px-1 py-0.5 rounded">!</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-xs">
                           {inRec ? (
                             <span className="text-green-600 font-medium">
