@@ -234,18 +234,18 @@ export default function UngTuyen() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50">
       <header className="bg-white/80 backdrop-blur-md border-b border-violet-100 sticky top-0 z-30">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <Link href="/" className="p-2 rounded-xl hover:bg-muted transition text-muted-foreground">
+        <div className="max-w-lg mx-auto px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3">
+          <Link href="/" className="p-2 rounded-xl hover:bg-muted transition text-muted-foreground flex-shrink-0">
             <ArrowLeft size={18} />
           </Link>
-          <div>
-            <h1 className="font-bold text-foreground text-base leading-tight">Đơn ứng tuyển</h1>
-            <p className="text-xs text-muted-foreground">Điền đầy đủ thông tin bên dưới</p>
+          <div className="min-w-0">
+            <h1 className="font-bold text-foreground text-sm sm:text-base leading-tight truncate">Đơn ứng tuyển</h1>
+            <p className="text-xs text-muted-foreground truncate">Điền đầy đủ thông tin bên dưới</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-6">
+      <main className="max-w-lg mx-auto px-3 sm:px-4 py-6">
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Thông tin cá nhân */}
           <div className="bg-white rounded-2xl shadow-sm border border-border p-5 space-y-4">

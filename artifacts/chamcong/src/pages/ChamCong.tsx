@@ -281,35 +281,36 @@ export default function ChamCong() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <header className="bg-white/80 backdrop-blur-md border-b border-blue-100 sticky top-0 z-30">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+        <div className="max-w-lg mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 flex-shrink-0 bg-primary rounded-lg flex items-center justify-center">
               <Camera size={16} className="text-white" />
             </div>
-            <span className="font-bold text-foreground text-lg">Chấm Công</span>
+            <span className="font-bold text-foreground text-base sm:text-lg truncate">Chấm Công</span>
           </div>
-          <nav className="flex gap-1">
+          <nav className="flex gap-0.5 sm:gap-1 flex-shrink-0">
             <Link
               href="/tra-cuu"
-              className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap"
             >
-              <Search size={14} />
-              Tra cứu
+              <Search size={13} />
+              <span className="hidden xs:inline">Tra cứu</span>
+              <span className="xs:hidden">Tìm</span>
             </Link>
             {zaloAdminLink ? (
               <a
                 href={zaloAdminLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg text-blue-600 hover:bg-blue-50 font-medium transition-colors"
+                className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg text-blue-600 hover:bg-blue-50 font-medium transition-colors whitespace-nowrap"
               >
-                <Phone size={14} />
-                Liên hệ
+                <Phone size={13} />
+                <span>Liên hệ</span>
               </a>
             ) : (
-              <span className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg text-muted-foreground/50 cursor-default select-none">
-                <Phone size={14} />
-                Liên hệ
+              <span className="flex items-center gap-1 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg text-muted-foreground/50 cursor-default select-none whitespace-nowrap">
+                <Phone size={13} />
+                <span className="hidden sm:inline">Liên hệ</span>
               </span>
             )}
           </nav>
@@ -343,7 +344,7 @@ export default function ChamCong() {
         </div>
       )}
 
-      <main className="max-w-lg mx-auto px-4 py-6">
+      <main className="max-w-lg mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="bg-white rounded-2xl shadow-sm border border-border p-5 space-y-4">
             <h2 className="font-semibold text-foreground text-base">Thông tin nhân viên</h2>

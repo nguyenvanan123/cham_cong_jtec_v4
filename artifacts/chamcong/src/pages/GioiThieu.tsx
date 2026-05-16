@@ -41,16 +41,19 @@ export default function GioiThieu() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50">
       <header className="bg-white/80 backdrop-blur-md border-b border-violet-100 sticky top-0 z-30">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center">
+        <div className="max-w-lg mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 flex-shrink-0 bg-violet-600 rounded-lg flex items-center justify-center">
               <Camera size={16} className="text-white" />
             </div>
-            <span className="font-bold text-foreground text-lg">Giới thiệu việc làm</span>
+            <span className="font-bold text-foreground text-sm sm:text-base lg:text-lg truncate">
+              <span className="hidden sm:inline">Giới thiệu việc làm</span>
+              <span className="sm:hidden">Giới thiệu</span>
+            </span>
           </div>
           <Link
             href="/"
-            className="text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex-shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap"
           >
             ← Chấm công
           </Link>

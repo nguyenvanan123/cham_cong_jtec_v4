@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, JobApplication } from "@/lib/supabase";
 import { Link } from "wouter";
 import {
-  Camera, Search, X, ChevronLeft, ChevronRight,
+  Camera, Search, X, ChevronLeft, ChevronRight, ChevronDown,
   Lock, Eye, EyeOff, LogOut, ShieldCheck,
   LayoutDashboard, ClipboardList, Settings,
   Download, Trash2, CheckCircle, XCircle,
@@ -809,6 +809,7 @@ function SettingsTab() {
   const [zaloAdminLink, setZaloAdminLink] = useState("");
   const [savingHours, setSavingHours] = useState(false);
   const [msgHours, setMsgHours] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [showSqlSetup, setShowSqlSetup] = useState(false);
 
   useEffect(() => {
     supabase.from("configs").select("key,value")
@@ -1032,14 +1033,23 @@ ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS referrer_bank_name TEXT DE
   return (
     <div className="space-y-5 max-w-lg">
       {/* Hướng dẫn setup tổng quát */}
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-        <p className="text-sm font-semibold text-amber-800 mb-1">
-          ⚠️ Setup Supabase (chạy 1 lần)
-        </p>
-        <p className="text-xs text-amber-700 mb-2">
-          Nếu không xóa được dữ liệu, popup/banner không hoạt động, hoặc lưu ca/đối soát thất bại — hãy chạy SQL này trong Supabase SQL Editor:
-        </p>
-        <pre className="bg-white border border-amber-200 rounded-xl p-3 text-xs text-amber-900 overflow-x-auto whitespace-pre-wrap">{SQL_SETUP}</pre>
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowSqlSetup(s => !s)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-amber-100/60 transition"
+        >
+          <span className="text-sm font-semibold text-amber-800">⚠️ Setup Supabase (chạy 1 lần)</span>
+          <ChevronDown size={16} className={`text-amber-600 transition-transform duration-200 ${showSqlSetup ? "rotate-180" : ""}`} />
+        </button>
+        {showSqlSetup && (
+          <div className="px-4 pb-4 space-y-2">
+            <p className="text-xs text-amber-700">
+              Nếu không xóa được dữ liệu, popup/banner không hoạt động, hoặc lưu ca/đối soát thất bại — hãy chạy SQL này trong Supabase SQL Editor:
+            </p>
+            <pre className="bg-white border border-amber-200 rounded-xl p-3 text-xs text-amber-900 overflow-x-auto whitespace-pre-wrap">{SQL_SETUP}</pre>
+          </div>
+        )}
       </div>
 
       {/* Đổi mật khẩu */}
@@ -1646,7 +1656,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-10 px-4 py-3 flex items-center justify-between">
+        <header className="bg-white/80 backdrop-blur-md border-b border-border sticky top-0 z-10 px-3 sm:px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(s => !s)} className="p-2 rounded-lg hover:bg-muted transition lg:hidden">
               <Menu size={18} />
@@ -1666,7 +1676,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         </header>
 
         {/* Tab content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto">
           {loading ? (
             <div className="flex items-center justify-center h-48 text-muted-foreground text-sm gap-2">
               <RefreshCw size={16} className="animate-spin" />Đang tải...
