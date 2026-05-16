@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import type { AttendanceRecord, JobApplication } from "@/lib/supabase";
+import type { AttendanceRecord, JobApplication, Shift } from "@/lib/supabase";
 import { Link } from "wouter";
 import {
   Camera, Search, X, ChevronLeft, ChevronRight, ChevronDown,
@@ -242,15 +242,25 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [filterShift, setFilterShift] = useState("");
+  const [dbShifts, setDbShifts] = useState<Shift[]>([]);
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const PER_PAGE = 12;
 
+  useEffect(() => {
+    supabase.from("shifts").select("*").order("created_at").then(({ data }) => {
+      setDbShifts((data || []) as Shift[]);
+    });
+  }, []);
+
   const grouped = groupByEmployee(allRecords);
 
-  const shiftOptions = Array.from(new Set(grouped.map(g => g.shift).filter(Boolean))).sort();
+  const shiftOptions = Array.from(new Set([
+    ...dbShifts.map(s => `${s.name} (${s.start_time} - ${s.end_time})`),
+    ...grouped.map(g => g.shift).filter(Boolean),
+  ])).sort();
 
   const filtered = grouped.filter(g => {
     const hasIn = g.records.some(r => r.action_type === "check-in");
