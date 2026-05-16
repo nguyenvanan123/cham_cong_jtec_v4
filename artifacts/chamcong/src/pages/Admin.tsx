@@ -257,7 +257,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
 
   const grouped = groupByEmployee(allRecords);
 
-  const shiftOptions = dbShifts.map(s => `${s.name} (${s.start_time} - ${s.end_time})`);
+  const shiftOptions = dbShifts.map(s => ({ value: s.name, label: `${s.name} (${s.start_time} - ${s.end_time})` }));
 
   const filtered = grouped.filter(g => {
     const hasIn = g.records.some(r => r.action_type === "check-in");
@@ -268,7 +268,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
     if (filterName && !g.full_name.toLowerCase().includes(filterName.toLowerCase())) return false;
     if (filterDateFrom && g.work_date < filterDateFrom) return false;
     if (filterDateTo && g.work_date > filterDateTo) return false;
-    if (filterShift && g.shift !== filterShift) return false;
+    if (filterShift && !g.shift.toLowerCase().includes(filterShift.toLowerCase())) return false;
     return true;
   });
 
@@ -332,7 +332,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
             className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition">
             <option value="">Tất cả ca</option>
             {shiftOptions.map(s => (
-              <option key={s} value={s}>{s.split("(")[0].trim()}</option>
+              <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
           <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value as FilterStatus); setPage(1); }}
