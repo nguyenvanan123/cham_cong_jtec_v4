@@ -841,16 +841,21 @@ function SettingsTab() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) { setMsgPw({ type: "err", text: "Mật khẩu xác nhận không khớp." }); return; }
-    if (newPassword.length < 4) { setMsgPw({ type: "err", text: "Mật khẩu phải có ít nhất 4 ký tự." }); return; }
-    if (adminPassword && (await supabase.from("configs").select("value").eq("key", "admin_password").single()).data?.value !== adminPassword) {
-      setMsgPw({ type: "err", text: "Mật khẩu hiện tại không đúng." }); return;
+    if (newPassword.length < 8) { setMsgPw({ type: "err", text: "Mật khẩu mới phải có ít nhất 8 ký tự." }); return; }
+    if (adminPassword) {
+      const { data } = await supabase.from("configs").select("value").eq("key", "admin_password").single();
+      const stored = data?.value ?? "";
+      const hashedCurrent = await sha256(adminPassword);
+      const match = stored === hashedCurrent || stored === adminPassword;
+      if (!match) { setMsgPw({ type: "err", text: "Mật khẩu hiện tại không đúng." }); return; }
     }
     setSavingPw(true);
-    await supabase.from("configs").upsert({ key: "admin_password", value: newPassword }, { onConflict: "key" });
-    setMsgPw({ type: "ok", text: "Đổi mật khẩu thành công!" });
+    const hashedNew = await sha256(newPassword);
+    await supabase.from("configs").upsert({ key: "admin_password", value: hashedNew }, { onConflict: "key" });
+    setMsgPw({ type: "ok", text: "Đổi mật khẩu thành công! Mật khẩu đã được mã hoá SHA-256." });
     setAdminPassword(newPassword); setNewPassword(""); setConfirmPassword("");
     setSavingPw(false);
-    setTimeout(() => setMsgPw(null), 3000);
+    setTimeout(() => setMsgPw(null), 4000);
   };
 
   const handleToggleBanner = async () => {
@@ -1384,6 +1389,68 @@ ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS referrer_bank_name TEXT DE
 }
 
 // ──────────────────────────────────────────────────────
+// Security helpers
+// ──────────────────────────────────────────────────────
+async function sha256(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateToken(): string {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+const SESSION_KEY = "admin_session_v2";
+const SESSION_DURATION = 8 * 60 * 60 * 1000; // 8 hours
+
+function getSession(): { token: string; expiry: number } | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as { token: string; expiry: number };
+    if (!s.token || !s.expiry || Date.now() > s.expiry) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return s;
+  } catch { return null; }
+}
+
+function setSession() {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token: generateToken(), expiry: Date.now() + SESSION_DURATION }));
+}
+
+function clearSession() {
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem("admin_auth");
+}
+
+const RATE_KEY = "admin_rate";
+const MAX_ATTEMPTS = 5;
+const LOCK_DURATION = 15 * 60 * 1000; // 15 minutes
+
+function getRateLimit(): { attempts: number; lockedUntil: number } {
+  try {
+    const raw = localStorage.getItem(RATE_KEY);
+    return raw ? JSON.parse(raw) : { attempts: 0, lockedUntil: 0 };
+  } catch { return { attempts: 0, lockedUntil: 0 }; }
+}
+
+function recordFailedAttempt() {
+  const r = getRateLimit();
+  const attempts = r.attempts + 1;
+  const lockedUntil = attempts >= MAX_ATTEMPTS ? Date.now() + LOCK_DURATION : r.lockedUntil;
+  localStorage.setItem(RATE_KEY, JSON.stringify({ attempts, lockedUntil }));
+  return { attempts, lockedUntil };
+}
+
+function resetRateLimit() {
+  localStorage.removeItem(RATE_KEY);
+}
+
+// ──────────────────────────────────────────────────────
 // Admin Login Screen
 // ──────────────────────────────────────────────────────
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -1391,18 +1458,48 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lockedUntil, setLockedUntil] = useState(() => getRateLimit().lockedUntil);
+  const [remaining, setRemaining] = useState(0);
+
+  useEffect(() => {
+    if (lockedUntil <= Date.now()) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+      setRemaining(left);
+      if (left <= 0) setLockedUntil(0);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [lockedUntil]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password.trim()) return;
+    const rate = getRateLimit();
+    if (rate.lockedUntil > Date.now()) return;
     setLoading(true);
     setError("");
     const { data } = await supabase.from("configs").select("value").eq("key", "admin_password").single();
-    if (data && data.value === password.trim()) {
-      sessionStorage.setItem("admin_auth", "true");
+    const stored = data?.value ?? "";
+    const hashed = await sha256(password.trim());
+    const isHashMatch = stored === hashed;
+    const isPlainMatch = stored === password.trim() && !isHashMatch;
+    if (isHashMatch || isPlainMatch) {
+      if (isPlainMatch) {
+        await supabase.from("configs").upsert({ key: "admin_password", value: hashed }, { onConflict: "key" });
+      }
+      resetRateLimit();
+      setSession();
       onLogin();
     } else {
-      setError("Mật khẩu không đúng. Vui lòng thử lại.");
+      const { attempts, lockedUntil: lu } = recordFailedAttempt();
+      if (lu > Date.now()) {
+        setLockedUntil(lu);
+        setError(`Sai quá ${MAX_ATTEMPTS} lần. Tài khoản bị khóa 15 phút.`);
+      } else {
+        setError(`Mật khẩu không đúng. Còn ${MAX_ATTEMPTS - attempts} lần thử.`);
+      }
     }
     setLoading(false);
   };
@@ -1428,15 +1525,22 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
                 onChange={e => { setPassword(e.target.value); setError(""); }}
                 placeholder="Nhập mật khẩu..."
                 autoFocus
-                className="w-full px-4 py-3 pr-10 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60 transition"
+                disabled={lockedUntil > Date.now()}
+                className="w-full px-4 py-3 pr-10 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60 transition disabled:opacity-40 disabled:cursor-not-allowed"
               />
               <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition">
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            {error && <p data-testid="login-error" className="text-red-400 text-xs mt-1.5">{error}</p>}
+            {lockedUntil > Date.now() && (
+              <p className="text-red-400 text-xs mt-1.5 flex items-center gap-1">
+                <Lock size={12} /> Tạm khóa — thử lại sau {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
+              </p>
+            )}
+            {error && !lockedUntil && <p data-testid="login-error" className="text-red-400 text-xs mt-1.5">{error}</p>}
+            {error && lockedUntil > 0 && <p data-testid="login-error" className="text-red-400 text-xs mt-1.5">{error}</p>}
           </div>
-          <button type="submit" data-testid="btn-admin-login" disabled={loading || !password.trim()}
+          <button type="submit" data-testid="btn-admin-login" disabled={loading || !password.trim() || lockedUntil > Date.now()}
             className="w-full py-3 bg-primary text-white rounded-xl font-semibold text-sm hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2">
             {loading ? <><RefreshCw size={14} className="animate-spin" />Đang kiểm tra...</> : "Đăng nhập"}
           </button>
@@ -1475,7 +1579,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleLogout = () => { sessionStorage.removeItem("admin_auth"); onLogout(); };
+  const handleLogout = () => { clearSession(); onLogout(); };
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: "Tổng quan", icon: <LayoutDashboard size={18} /> },
@@ -1589,7 +1693,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 // ──────────────────────────────────────────────────────
 export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => sessionStorage.getItem("admin_auth") === "true"
+    () => getSession() !== null
   );
   if (!isAuthenticated) return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
   return <AdminDashboard onLogout={() => setIsAuthenticated(false)} />;
