@@ -217,36 +217,45 @@ export default function ChamCong() {
     };
 
     try {
-      const inserts: Promise<void>[] = [];
+     const inserts: Promise<void>[] = [];
 
-      if (!hasCheckIn) {
-        const ciUrl = await uploadPhoto(checkInBlob, "check-in");
-        inserts.push(
-          supabase.from("attendance").insert({
-            employee_id: eid,
-            full_name: fullName.trim(),
-            work_date: workDate,
-            shift,
-            action_type: "check-in",
-            image_url: ciUrl,
-          }).then(({ error }) => { if (error) throw new Error("Lỗi lưu check-in: " + error.message); })
-        );
-      }
+if (!hasCheckIn) {
+  const ciUrl = await uploadPhoto(checkInBlob, "check-in");
+  inserts.push(
+    // Bọc Promise.resolve ở đầu để biến đổi PromiseLike thành Promise chuẩn
+    Promise.resolve(
+      supabase.from("attendance").insert({
+        employee_id: eid,
+        full_name: fullName.trim(),
+        work_date: workDate,
+        shift,
+        action_type: "check-in",
+        image_url: ciUrl,
+      }).then(({ error }) => { 
+        if (error) throw new Error("Lỗi lưu check-in: " + error.message); 
+      })
+    )
+  );
+}
 
-      if (!hasCheckOut) {
-        const coUrl = await uploadPhoto(checkOutBlob, "check-out");
-        inserts.push(
-          supabase.from("attendance").insert({
-            employee_id: eid,
-            full_name: fullName.trim(),
-            work_date: workDate,
-            shift,
-            action_type: "check-out",
-            image_url: coUrl,
-          }).then(({ error }) => { if (error) throw new Error("Lỗi lưu check-out: " + error.message); })
-        );
-      }
-
+if (!hasCheckOut) {
+  const coUrl = await uploadPhoto(checkOutBlob, "check-out");
+  inserts.push(
+    // Bọc tương tự cho phần check-out
+    Promise.resolve(
+      supabase.from("attendance").insert({
+        employee_id: eid,
+        full_name: fullName.trim(),
+        work_date: workDate,
+        shift,
+        action_type: "check-out",
+        image_url: coUrl,
+      }).then(({ error }) => { 
+        if (error) throw new Error("Lỗi lưu check-out: " + error.message); 
+      })
+    )
+  );
+}
       await Promise.all(inserts);
       showToast("success", "Chấm công thành công! Check-in & Check-out đã được lưu.");
       resetPhotos();
