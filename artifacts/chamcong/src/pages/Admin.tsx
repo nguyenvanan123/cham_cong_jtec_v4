@@ -257,10 +257,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
 
   const grouped = groupByEmployee(allRecords);
 
-  const shiftOptions = Array.from(new Set([
-    ...dbShifts.map(s => `${s.name} (${s.start_time} - ${s.end_time})`),
-    ...grouped.map(g => g.shift).filter(Boolean),
-  ])).sort();
+  const shiftOptions = dbShifts.map(s => `${s.name} (${s.start_time} - ${s.end_time})`);
 
   const filtered = grouped.filter(g => {
     const hasIn = g.records.some(r => r.action_type === "check-in");
