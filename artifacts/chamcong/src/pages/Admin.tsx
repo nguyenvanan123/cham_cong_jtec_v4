@@ -241,6 +241,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
+  const [filterShift, setFilterShift] = useState("");
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -248,6 +249,8 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   const PER_PAGE = 12;
 
   const grouped = groupByEmployee(allRecords);
+
+  const shiftOptions = Array.from(new Set(grouped.map(g => g.shift).filter(Boolean))).sort();
 
   const filtered = grouped.filter(g => {
     const hasIn = g.records.some(r => r.action_type === "check-in");
@@ -258,6 +261,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
     if (filterName && !g.full_name.toLowerCase().includes(filterName.toLowerCase())) return false;
     if (filterDateFrom && g.work_date < filterDateFrom) return false;
     if (filterDateTo && g.work_date > filterDateTo) return false;
+    if (filterShift && g.shift !== filterShift) return false;
     return true;
   });
 
@@ -280,7 +284,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   };
 
   const clearFilters = () => {
-    setFilterEmployeeId(""); setFilterName(""); setFilterDateFrom(""); setFilterDateTo(""); setFilterStatus("all"); setPage(1);
+    setFilterEmployeeId(""); setFilterName(""); setFilterDateFrom(""); setFilterDateTo(""); setFilterStatus("all"); setFilterShift(""); setPage(1);
   };
 
   return (
@@ -308,7 +312,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <input type="text" placeholder="Mã NV..." value={filterEmployeeId} onChange={e => { setFilterEmployeeId(e.target.value); setPage(1); }}
             className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
           <input type="text" placeholder="Tên NV..." value={filterName} onChange={e => { setFilterName(e.target.value); setPage(1); }}
@@ -317,9 +321,16 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
             className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
           <input type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
             className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+          <select value={filterShift} onChange={e => { setFilterShift(e.target.value); setPage(1); }}
+            className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition">
+            <option value="">Tất cả ca</option>
+            {shiftOptions.map(s => (
+              <option key={s} value={s}>{s.split("(")[0].trim()}</option>
+            ))}
+          </select>
           <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value as FilterStatus); setPage(1); }}
             className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition">
-            <option value="all">Tất cả</option>
+            <option value="all">Tất cả trạng thái</option>
             <option value="complete">Hoàn thành</option>
             <option value="incomplete">Thiếu</option>
           </select>
