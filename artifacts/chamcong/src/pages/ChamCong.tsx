@@ -221,21 +221,38 @@ export default function ChamCong() {
 
 if (!hasCheckIn) {
   const ciUrl = await uploadPhoto(checkInBlob, "check-in");
-  inserts.push(
-    // Bọc Promise.resolve ở đầu để biến đổi PromiseLike thành Promise chuẩn
-    Promise.resolve(
-      supabase.from("attendance").insert({
-        employee_id: eid,
-        full_name: fullName.trim(),
-        work_date: workDate,
-        shift,
-        action_type: "check-in",
-        image_url: ciUrl,
-      }).then(({ error }) => { 
-        if (error) throw new Error("Lỗi lưu check-in: " + error.message); 
-      })
-    )
-  );
+inserts.push(
+  Promise.resolve(
+    supabase.from("attendance").insert({
+      employee_id: eid,
+      full_name: fullName.trim(),
+      work_date: workDate,
+      shift,
+      action_type: "check-in",
+      image_url: ciUrl,
+    }).then(({ error }) => { 
+      if (error) throw new Error("Lỗi lưu check-in: " + error.message); 
+    })
+  )
+);
+}
+
+if (!hasCheckOut) {
+const coUrl = await uploadPhoto(checkOutBlob, "check-out");
+inserts.push(
+  Promise.resolve(
+    supabase.from("attendance").insert({
+      employee_id: eid,
+      full_name: fullName.trim(),
+      work_date: workDate,
+      shift,
+      action_type: "check-out",
+      image_url: coUrl,
+    }).then(({ error }) => { 
+      if (error) throw new Error("Lỗi lưu check-out: " + error.message); 
+    })
+  )
+);
 }
 
 if (!hasCheckOut) {
