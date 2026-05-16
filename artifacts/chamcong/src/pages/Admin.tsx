@@ -460,6 +460,8 @@ function JobApplicationsTab() {
   const [loading, setLoading] = useState(true);
   const [filterName, setFilterName] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [modalImages, setModalImages] = useState<{ front: string | null; back: string | null; appName?: string } | null>(null);
   const [modalImageTab, setModalImageTab] = useState<"front" | "back">("front");
@@ -507,6 +509,14 @@ function JobApplicationsTab() {
   const filtered = apps.filter(a => {
     if (filterName && !a.full_name.toLowerCase().includes(filterName.toLowerCase())) return false;
     if (filterStatus !== "all" && a.status !== filterStatus) return false;
+    if (filterDateFrom) {
+      const submitted = new Date(a.created_at).toISOString().slice(0, 10);
+      if (submitted < filterDateFrom) return false;
+    }
+    if (filterDateTo) {
+      const submitted = new Date(a.created_at).toISOString().slice(0, 10);
+      if (submitted > filterDateTo) return false;
+    }
     return true;
   });
 
@@ -541,7 +551,7 @@ function JobApplicationsTab() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-border shadow-sm p-4">
+      <div className="bg-white rounded-2xl border border-border shadow-sm p-4 space-y-3">
         <div className="flex gap-3 flex-wrap">
           <input type="text" placeholder="Tìm theo tên..." value={filterName}
             onChange={e => { setFilterName(e.target.value); setPage(1); }}
@@ -557,6 +567,24 @@ function JobApplicationsTab() {
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
             Làm mới
           </button>
+        </div>
+        <div className="flex gap-3 flex-wrap items-center">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Ngày nộp:</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="date" value={filterDateFrom}
+              onChange={e => { setFilterDateFrom(e.target.value); setPage(1); }}
+              className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+            <span className="text-xs text-muted-foreground">đến</span>
+            <input type="date" value={filterDateTo}
+              onChange={e => { setFilterDateTo(e.target.value); setPage(1); }}
+              className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+            {(filterDateFrom || filterDateTo) && (
+              <button onClick={() => { setFilterDateFrom(""); setFilterDateTo(""); setPage(1); }}
+                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-lg hover:bg-muted transition">
+                Xóa lọc
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
