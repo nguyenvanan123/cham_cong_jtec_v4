@@ -76,6 +76,7 @@ ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS bank_name TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_in_image TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_image TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS employee_type CHAR(1) DEFAULT '';
+ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
 
 -- Bước 3: Tắt RLS (bắt buộc để lưu dữ liệu đối soát)
 ALTER TABLE reconciliations DISABLE ROW LEVEL SECURITY;`;
@@ -99,6 +100,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [bankAccount, setBankAccount] = useState("");
   const [bankName, setBankName] = useState("");
   const [employeeType, setEmployeeType] = useState<"N" | "O" | "">("");
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
 
@@ -149,12 +151,13 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setShiftId(matched?.id ?? shifts[0]?.id ?? "");
     setBankAccount("");
     setBankName("");
+    setNotes("");
     // Load loại NV từ localStorage trước (nhanh)
     const storedType = localStorage.getItem(EMP_TYPE_KEY(g.employee_id));
     setEmployeeType((storedType as "N" | "O") || "");
     // Nếu đã đối soát trước đó, load lại toàn bộ dữ liệu đã xác nhận
     const { data } = await supabase.from("reconciliations")
-      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type")
+      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, notes")
       .eq("employee_id", g.employee_id)
       .eq("work_date", g.work_date)
       .limit(1);
@@ -162,12 +165,13 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       const saved = data[0] as {
         check_in_time: string; check_out_time: string;
         shift_name: string; bank_account: string; bank_name: string;
-        employee_type?: string;
+        employee_type?: string; notes?: string;
       };
       if (saved.check_in_time) setInTime(saved.check_in_time);
       if (saved.check_out_time) setOutTime(saved.check_out_time);
       if (saved.bank_account) setBankAccount(saved.bank_account);
       if (saved.bank_name) setBankName(saved.bank_name);
+      setNotes(saved.notes || "");
       // employee_type từ DB ưu tiên hơn localStorage
       if (saved.employee_type) setEmployeeType(saved.employee_type as "N" | "O");
       // Khớp lại shift từ tên đã lưu
@@ -181,7 +185,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     }
   };
 
-  const closePopup = () => setSelected(null);
+  const closePopup = () => { setSelected(null); setNotes(""); };
 
   const shift = shifts.find(s => s.id === shiftId) ?? null;
   const hrs = calcHours(inTime, outTime);
@@ -223,6 +227,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       bank_name: bankName,
       check_in_image: selected.checkIn?.image_url ?? "",
       check_out_image: selected.checkOut?.image_url ?? "",
+      notes: notes,
     };
 
     // Thử lưu với employee_type trước
@@ -494,6 +499,18 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                 {(bankAccount || bankName) && (
                   <p className="text-xs text-green-600 mt-1 flex items-center gap-1"><CheckCircle size={11} />Đã tự điền từ lần trước</p>
                 )}
+              </div>
+
+              {/* Ghi chú */}
+              <div>
+                <label className="text-xs font-semibold text-foreground mb-1.5 block">📝 Ghi chú</label>
+                <textarea
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Nhập ghi chú về ca này, lý do đặc biệt... (tuỳ chọn)"
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                />
               </div>
             </div>
 

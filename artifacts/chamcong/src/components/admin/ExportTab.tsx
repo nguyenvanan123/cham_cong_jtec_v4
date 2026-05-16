@@ -41,6 +41,7 @@ export function ExportTab() {
   const [modalImg, setModalImg] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [hoursFilter, setHoursFilter] = useState<HoursFilter>("all");
+  const [showNotes, setShowNotes] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,26 +64,38 @@ export function ExportTab() {
     return getRowCase(r) === hoursFilter;
   });
 
-  const exportCSV = () => {
+  const exportExcel = () => {
+    const bgColor: Record<RowCase, string> = {
+      under8: "#fecaca",
+      full8_overtime: "#bbf7d0",
+      full8_no_overtime: "#bfdbfe",
+    };
+    const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const headers = [
       "Loại NV", "Ngày", "Mã NV", "Họ tên", "Ca làm",
       "Giờ vào", "Giờ ra", "Tổng giờ", "Giờ thường", "Tăng ca",
       "Lương cơ bản", "Lương tăng ca", "Thưởng", "Chuyên cần", "Tổng lương",
       "Số TK", "Tên NH",
+      ...(showNotes ? ["Ghi chú"] : []),
     ];
-    const rows = filtered.map(r => [
-      r.employee_type || "",
-      r.work_date, r.employee_id, r.full_name, r.shift_name,
-      r.check_in_time, r.check_out_time,
-      r.total_hours.toFixed(2), r.normal_hours.toFixed(2), r.overtime_hours.toFixed(2),
-      r.base_wage, r.overtime_pay, r.bonus, r.attendance_bonus, r.total_wage,
-      r.bank_account, r.bank_name,
-    ]);
-    const csv = [headers, ...rows].map(row => row.map(c => `"${c ?? ""}"`).join(",")).join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const headerRow = `<tr style="background:#e2e8f0;font-weight:bold">${headers.map(h => `<td>${esc(h)}</td>`).join("")}</tr>`;
+    const dataRows = filtered.map(r => {
+      const cas = getRowCase(r);
+      const cells = [
+        r.employee_type || "", r.work_date, r.employee_id, r.full_name, r.shift_name,
+        r.check_in_time, r.check_out_time,
+        r.total_hours.toFixed(2), r.normal_hours.toFixed(2), r.overtime_hours.toFixed(2),
+        r.base_wage, r.overtime_pay, r.bonus, r.attendance_bonus, r.total_wage,
+        r.bank_account, r.bank_name,
+        ...(showNotes ? [r.notes || ""] : []),
+      ];
+      return `<tr style="background:${bgColor[cas]}">${cells.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`;
+    });
+    const html = `<html><head><meta charset="utf-8"></head><body><table>${headerRow}${dataRows.join("")}</table></body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `doi-soat_${from}_${to}.csv`; a.click();
+    a.href = url; a.download = `doi-soat_${from}_${to}.xls`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -150,10 +163,19 @@ export function ExportTab() {
           <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-input text-sm text-muted-foreground hover:bg-muted transition">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />Tải lại
           </button>
-          <button onClick={exportCSV} disabled={filtered.length === 0}
-            className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition disabled:opacity-50">
-            <Download size={15} />Xuất CSV ({filtered.length})
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setShowNotes(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium transition ${showNotes ? "bg-amber-100 border-amber-300 text-amber-800" : "border-input text-muted-foreground hover:bg-muted"}`}
+              title="Hiện/ẩn cột ghi chú"
+            >
+              {showNotes ? "🗒️ Ẩn ghi chú" : "🗒️ Ghi chú"}
+            </button>
+            <button onClick={exportExcel} disabled={filtered.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition disabled:opacity-50">
+              <Download size={15} />Xuất Excel ({filtered.length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -225,7 +247,7 @@ export function ExportTab() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  {["L.NV","Ngày","Mã NV","Họ tên","Ca","Vào","Ra","T.Giờ","Thường","TC","Lương CB","Lương TC","Thưởng","Tổng lương","STK","NH","Ảnh",""].map(h => (
+                  {["L.NV","Ngày","Mã NV","Họ tên","Ca","Vào","Ra","T.Giờ","Thường","TC","Lương CB","Lương TC","Thưởng","Tổng lương","STK","NH",...(showNotes ? ["Ghi chú"] : []),"Ảnh",""].map(h => (
                     <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -267,6 +289,11 @@ export function ExportTab() {
                       <td className="px-3 py-3 text-xs font-black text-primary whitespace-nowrap">{fM(r.total_wage)}đ</td>
                       <td className="px-3 py-3 text-xs font-mono">{r.bank_account || "—"}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{r.bank_name || "—"}</td>
+                      {showNotes && (
+                        <td className="px-3 py-3 text-xs text-muted-foreground max-w-[160px]">
+                          <span className="line-clamp-2">{r.notes || <span className="opacity-40">—</span>}</span>
+                        </td>
+                      )}
                       <td className="px-3 py-3">
                         <div className="flex gap-1">
                           {r.check_in_image && (
@@ -297,7 +324,7 @@ export function ExportTab() {
                     TỔNG CỘNG ({filtered.length} bản ghi):
                   </td>
                   <td className="px-3 py-3 text-sm font-black text-primary whitespace-nowrap">{fM(totalWage)}đ</td>
-                  <td colSpan={4} />
+                  <td colSpan={showNotes ? 5 : 4} />
                 </tr>
               </tfoot>
             </table>
