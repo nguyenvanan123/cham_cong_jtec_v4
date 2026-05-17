@@ -357,7 +357,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[700px] text-sm">
                 <thead className="bg-muted/40 border-b border-border">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide w-24">Trạng thái</th>
@@ -392,7 +392,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                         <td className="px-4 py-3 font-mono text-xs font-bold text-foreground">{g.employee_id}</td>
                         <td className="px-4 py-3 text-foreground font-medium">{g.full_name}</td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{g.work_date}</td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs max-w-[100px] truncate">{g.shift.split("(")[0].trim()}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                           {(inRec ?? outRec) ? (
                             <span className="flex flex-col">

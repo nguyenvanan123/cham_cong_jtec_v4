@@ -219,10 +219,10 @@ export function ExportTab() {
             </button>
           ))}
 
-          <div className="ml-auto flex items-center gap-4 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-200 inline-block" />Chưa đủ 8h</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-200 inline-block" />Đủ 8h + TC</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-100 inline-block" />Đủ 8h, không TC</span>
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground mt-1 sm:mt-0 sm:ml-auto">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-200 inline-block flex-shrink-0" />Chưa đủ 8h</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-200 inline-block flex-shrink-0" />Đủ 8h + TC</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-100 inline-block flex-shrink-0" />Đủ 8h, không TC</span>
           </div>
         </div>
       )}
@@ -244,7 +244,7 @@ export function ExportTab() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1300px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
                   {["L.NV","Ngày","Mã NV","Họ tên","Ca","Vào","Ra","T.Giờ","Thường","TC","Lương CB","Lương TC","Thưởng","Tổng lương","STK","NH",...(showNotes ? ["Ghi chú"] : []),"Ảnh",""].map(h => (

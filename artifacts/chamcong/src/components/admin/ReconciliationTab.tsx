@@ -292,7 +292,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[750px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
                   {["Trạng thái", "Loại", "Mã NV", "Họ tên", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
@@ -332,7 +332,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                       </td>
                       <td className="px-4 py-3 font-mono text-xs font-bold">{g.employee_id}</td>
                       <td className="px-4 py-3 font-medium">{g.full_name}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-[100px] truncate">{g.shift.split("(")[0].trim()}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
                       <td className="px-4 py-3 text-xs">{g.checkIn ? <span className="text-green-600 font-medium">{toHHMM(g.checkIn.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-4 py-3 text-xs">{g.checkOut ? <span className="text-blue-600 font-medium">{toHHMM(g.checkOut.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
@@ -420,7 +420,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
               {hrs && (
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100">
                   <p className="text-xs font-semibold text-foreground mb-3">📊 Kết quả tính toán</p>
-                  <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                  <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 text-center mb-4">
                     {[
                       { label: "Tổng giờ", val: fH(hrs.total), color: "text-foreground" },
                       { label: "Giờ thường", val: fH(hrs.normal), color: "text-green-600" },

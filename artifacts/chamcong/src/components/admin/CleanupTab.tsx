@@ -441,7 +441,7 @@ export function CleanupTab() {
         </div>
 
         {/* Nút hành động */}
-        <div className="flex gap-3 pt-1">
+        <div className="flex flex-wrap gap-3 pt-1">
           <button onClick={handleSearch} disabled={!selectedType || loading}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed">
             {loading
@@ -520,7 +520,7 @@ export function CleanupTab() {
 
           {/* Bảng */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
                   {/* Header checkbox: chọn/bỏ chọn tất cả trang hiện tại */}

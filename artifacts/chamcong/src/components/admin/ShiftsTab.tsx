@@ -147,7 +147,7 @@ export function ShiftsTab() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
                   {["Tên ca", "Giờ", "Lương/ca", "Tăng ca/giờ", "Thưởng", "Chuyên cần", ""].map(h => (
@@ -199,7 +199,7 @@ export function ShiftsTab() {
                   className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(["start_time", "end_time"] as const).map(k => (
                   <div key={k}>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -214,11 +214,11 @@ export function ShiftsTab() {
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {numField("base_wage", "Lương cơ bản/ca (đ)")}
                 {numField("overtime_wage", "Lương tăng ca/giờ (đ)")}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {numField("bonus", "Thưởng (đ)")}
                 {numField("attendance_bonus", "Thưởng chuyên cần (đ)")}
               </div>
