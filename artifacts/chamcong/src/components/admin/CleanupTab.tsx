@@ -8,18 +8,18 @@ import {
 // ──────────────────────────────────────────────────────
 // Kiểu dữ liệu cho từng loại bản ghi
 // ──────────────────────────────────────────────────────
-type DataType = "attendance" | "shifts" | "job_applications";
+type DataType = "attendance" | "shifts" | "job_applications" | "reconciliations";
 
 type DataOption = {
   value: DataType;
   label: string;
   table: string;
-  dateField: string; // trường dùng để lọc theo ngày
+  dateField: string;
   columns: string[];
   renderRow: (row: Record<string, unknown>) => React.ReactNode[];
 };
 
-// Cấu hình cho từng loại dữ liệu
+// Tất cả các loại dữ liệu — trừ "Cài đặt" và "Tổng quan" vì là dữ liệu hệ thống
 const DATA_OPTIONS: DataOption[] = [
   {
     value: "attendance",
@@ -64,6 +64,21 @@ const DATA_OPTIONS: DataOption[] = [
       r.created_at ? new Date(r.created_at as string).toLocaleString("vi-VN") : "-",
     ],
   },
+  {
+    value: "reconciliations",
+    label: "Đối soát lương",
+    table: "reconciliations",
+    dateField: "created_at",
+    columns: ["Mã NV", "Họ tên", "Ngày làm", "Ca", "Tổng lương", "Ngày tạo"],
+    renderRow: (r) => [
+      r.employee_id as string,
+      r.full_name as string,
+      r.work_date as string,
+      r.shift_name as string,
+      `${(r.total_wage as number)?.toLocaleString("vi-VN")} ₫`,
+      r.created_at ? new Date(r.created_at as string).toLocaleString("vi-VN") : "-",
+    ],
+  },
 ];
 
 const ITEMS_PER_PAGE = 15;
@@ -89,13 +104,13 @@ function ConfirmModal({
   deleting: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-[#1e2130] border border-red-500/30 rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-white border border-border rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-red-700 to-rose-700 px-5 pt-5 pb-4 flex items-start gap-3 relative">
+        <div className="bg-gradient-to-r from-red-600 to-rose-600 px-5 pt-5 pb-4 flex items-start gap-3 relative">
           <button
             onClick={onCancel}
-            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
+            className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
             disabled={deleting}
           >
             <X size={14} className="text-white" />
@@ -105,33 +120,32 @@ function ConfirmModal({
           </div>
           <div>
             <h3 className="text-white font-bold text-base leading-tight">Xác nhận xóa dữ liệu</h3>
-            <p className="text-red-200 text-xs mt-0.5">Hành động này không thể hoàn tác</p>
+            <p className="text-red-100 text-xs mt-0.5">Hành động này không thể hoàn tác</p>
           </div>
         </div>
 
         {/* Body */}
         <div className="px-5 py-5 space-y-4">
-          <p className="text-slate-200 text-sm leading-relaxed">
+          <p className="text-foreground text-sm leading-relaxed">
             Bạn có chắc muốn xóa{" "}
-            <span className="font-bold text-red-400 text-base">{count}</span>{" "}
+            <span className="font-bold text-red-600 text-base">{count}</span>{" "}
             bản ghi thuộc mục{" "}
-            <span className="font-semibold text-white">"{label}"</span>?
+            <span className="font-semibold">"{label}"</span>?
           </p>
-          {/* Hiển thị khoảng ngày đã lọc trong modal */}
           {(dateFrom || dateTo) && (
-            <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-slate-300">
-              <CalendarRange size={13} className="text-slate-400 flex-shrink-0" />
+            <div className="bg-muted border border-border rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <CalendarRange size={13} className="flex-shrink-0" />
               <span>
                 Khoảng ngày:{" "}
-                <span className="text-white font-medium">{dateFrom || "đầu"}</span>
+                <span className="text-foreground font-medium">{dateFrom || "đầu"}</span>
                 {" → "}
-                <span className="text-white font-medium">{dateTo || "cuối"}</span>
+                <span className="text-foreground font-medium">{dateTo || "cuối"}</span>
               </span>
             </div>
           )}
-          <div className="bg-red-900/30 border border-red-500/20 rounded-xl px-4 py-3 flex items-start gap-2">
-            <AlertTriangle size={14} className="text-red-400 mt-0.5 flex-shrink-0" />
-            <p className="text-red-300 text-xs">
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-2">
+            <AlertTriangle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
+            <p className="text-red-600 text-xs">
               Dữ liệu sẽ bị xóa vĩnh viễn khỏi Supabase và không thể khôi phục.
             </p>
           </div>
@@ -142,7 +156,7 @@ function ConfirmModal({
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="flex-1 py-2.5 border border-slate-600 rounded-xl text-sm text-slate-300 hover:bg-slate-700 transition font-medium disabled:opacity-50"
+            className="flex-1 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted transition font-medium disabled:opacity-50"
           >
             Hủy
           </button>
@@ -172,60 +186,47 @@ export function CleanupTab() {
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false); // đã từng bấm tìm chưa
+  const [searched, setSearched] = useState(false);
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Hiển thị toast thông báo tạm thời
   const showToast = (type: "success" | "error", text: string) => {
     setToast({ type, text });
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Lấy cấu hình option đang chọn
   const currentOption = DATA_OPTIONS.find((o) => o.value === selectedType) ?? null;
 
   // Tải dữ liệu từ Supabase với bộ lọc ngày
-  const fetchData = useCallback(
-    async (type: DataType, from: string, to: string) => {
-      setLoading(true);
-      setPage(1);
+  const fetchData = useCallback(async (type: DataType, from: string, to: string) => {
+    setLoading(true);
+    setPage(1);
 
-      const option = DATA_OPTIONS.find((o) => o.value === type);
-      if (!option) { setLoading(false); return; }
+    const option = DATA_OPTIONS.find((o) => o.value === type);
+    if (!option) { setLoading(false); return; }
 
-      let query = supabase
-        .from(option.table)
-        .select("*")
-        .order(option.dateField, { ascending: false });
+    let query = supabase
+      .from(option.table)
+      .select("*")
+      .order(option.dateField, { ascending: false });
 
-      // Áp dụng lọc theo ngày nếu có
-      if (from) {
-        // Từ đầu ngày (00:00:00) của dateFrom
-        query = query.gte(option.dateField, `${from}T00:00:00`);
-      }
-      if (to) {
-        // Đến cuối ngày (23:59:59) của dateTo
-        query = query.lte(option.dateField, `${to}T23:59:59`);
-      }
+    if (from) query = query.gte(option.dateField, `${from}T00:00:00`);
+    if (to)   query = query.lte(option.dateField, `${to}T23:59:59`);
 
-      const { data, error } = await Promise.resolve(query);
+    const { data, error } = await Promise.resolve(query);
 
-      if (error) {
-        showToast("error", "Lỗi tải dữ liệu: " + error.message);
-        setRows([]);
-      } else {
-        setRows((data ?? []) as Record<string, unknown>[]);
-      }
-      setSearched(true);
-      setLoading(false);
-    },
-    []
-  );
+    if (error) {
+      showToast("error", "Lỗi tải dữ liệu: " + error.message);
+      setRows([]);
+    } else {
+      setRows((data ?? []) as Record<string, unknown>[]);
+    }
+    setSearched(true);
+    setLoading(false);
+  }, []);
 
-  // Khi thay đổi loại dữ liệu → reset tất cả
   const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value as DataType | "";
     setSelectedType(val);
@@ -234,13 +235,11 @@ export function CleanupTab() {
     setPage(1);
   };
 
-  // Bấm nút "Tìm kiếm"
   const handleSearch = () => {
     if (!selectedType) return;
     fetchData(selectedType as DataType, dateFrom, dateTo);
   };
 
-  // Xóa bộ lọc ngày và reset kết quả
   const handleClearDates = () => {
     setDateFrom("");
     setDateTo("");
@@ -249,11 +248,9 @@ export function CleanupTab() {
     setPage(1);
   };
 
-  // Phân trang
   const totalPages = Math.max(1, Math.ceil(rows.length / ITEMS_PER_PAGE));
   const pagedRows = rows.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
 
-  // Xóa toàn bộ dữ liệu đã lọc (theo danh sách id)
   const handleDelete = async () => {
     if (!currentOption) return;
     setDeleting(true);
@@ -281,17 +278,16 @@ export function CleanupTab() {
     }
   };
 
-  // Nút dọn dẹp chỉ active khi có dữ liệu
   const cleanupEnabled = !!selectedType && rows.length > 0 && !loading;
   const hasDateFilter = !!dateFrom || !!dateTo;
 
   return (
-    <div className="min-h-full bg-[#0f1117] text-slate-200 rounded-2xl p-4 sm:p-6 space-y-5">
+    <div className="space-y-5">
       {/* Toast */}
       {toast && (
         <div
           className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium transition-all duration-300 ${
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
+            toast.type === "success" ? "bg-green-500" : "bg-destructive"
           }`}
         >
           {toast.text}
@@ -300,44 +296,42 @@ export function CleanupTab() {
 
       {/* Header */}
       <div>
-        <h2 className="text-lg font-bold text-white flex items-center gap-2">
-          <Trash2 size={20} className="text-red-400" />
+        <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+          <Trash2 size={18} className="text-destructive" />
           Dọn dẹp dữ liệu
         </h2>
-        <p className="text-slate-400 text-sm mt-0.5">
+        <p className="text-muted-foreground text-sm mt-0.5">
           Lọc theo loại và khoảng ngày, sau đó xóa vĩnh viễn các bản ghi không cần thiết.
         </p>
       </div>
 
-      {/* Khu vực bộ lọc */}
-      <div className="bg-[#1a1d2e] border border-slate-700 rounded-2xl p-4 space-y-4">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+      {/* Khung bộ lọc */}
+      <div className="bg-white rounded-2xl border border-border p-4 shadow-sm space-y-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Filter size={12} /> Bộ lọc
         </p>
 
-        {/* Hàng 1: Chọn loại dữ liệu */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <select
-              value={selectedType}
-              onChange={handleTypeChange}
-              className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-[#0f1117] border border-slate-700 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition appearance-none cursor-pointer"
-            >
-              <option value="">-- Chọn loại dữ liệu --</option>
-              {DATA_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Chọn loại dữ liệu */}
+        <div className="relative">
+          <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <select
+            value={selectedType}
+            onChange={handleTypeChange}
+            className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition appearance-none cursor-pointer"
+          >
+            <option value="">-- Chọn loại dữ liệu --</option>
+            {DATA_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Hàng 2: Bộ lọc ngày từ — đến */}
+        {/* Bộ lọc ngày từ — đến */}
         <div className="flex flex-col sm:flex-row gap-3 items-end">
           <div className="flex-1 space-y-1">
-            <label className="text-xs text-slate-400 font-medium flex items-center gap-1">
+            <label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
               <CalendarRange size={12} /> Từ ngày
             </label>
             <input
@@ -345,14 +339,14 @@ export function CleanupTab() {
               value={dateFrom}
               max={dateTo || undefined}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#0f1117] border border-slate-700 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition"
+              className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
             />
           </div>
 
-          <div className="hidden sm:flex items-center pb-2.5 text-slate-500 text-sm font-medium">→</div>
+          <div className="hidden sm:flex items-center pb-2.5 text-muted-foreground text-sm font-medium">→</div>
 
           <div className="flex-1 space-y-1">
-            <label className="text-xs text-slate-400 font-medium flex items-center gap-1">
+            <label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
               <CalendarRange size={12} /> Đến ngày
             </label>
             <input
@@ -360,15 +354,14 @@ export function CleanupTab() {
               value={dateTo}
               min={dateFrom || undefined}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-[#0f1117] border border-slate-700 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition"
+              className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
             />
           </div>
 
-          {/* Nút xóa lọc ngày */}
           {hasDateFilter && (
             <button
               onClick={handleClearDates}
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs transition flex-shrink-0"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-border text-muted-foreground hover:bg-muted text-xs transition flex-shrink-0"
               title="Xóa bộ lọc ngày"
             >
               <X size={13} /> Xóa lọc
@@ -376,12 +369,12 @@ export function CleanupTab() {
           )}
         </div>
 
-        {/* Hàng 3: Nút tìm kiếm + dọn dẹp */}
+        {/* Nút hành động */}
         <div className="flex gap-3 pt-1">
           <button
             onClick={handleSearch}
             disabled={!selectedType || loading}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? (
               <><RefreshCw size={14} className="animate-spin" />Đang tải...</>
@@ -393,7 +386,7 @@ export function CleanupTab() {
           <button
             onClick={() => setShowModal(true)}
             disabled={!cleanupEnabled}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white text-sm font-semibold transition hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-md"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-destructive text-destructive-foreground text-sm font-semibold hover:opacity-90 transition disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <Trash2 size={14} />
             Dọn dẹp {rows.length > 0 ? `(${rows.length})` : ""}
@@ -403,48 +396,48 @@ export function CleanupTab() {
 
       {/* Kết quả */}
       {loading ? (
-        <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm">
+        <div className="flex items-center justify-center h-48 gap-2 text-muted-foreground text-sm">
           <RefreshCw size={16} className="animate-spin" />
           Đang tải dữ liệu...
         </div>
       ) : !searched ? (
-        <div className="flex flex-col items-center justify-center h-48 text-slate-500 text-sm gap-2">
-          <Search size={32} className="opacity-30" />
-          <p>Chọn bộ lọc rồi bấm <span className="text-slate-300 font-medium">Tìm kiếm</span> để xem dữ liệu.</p>
+        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
+          <Search size={32} className="opacity-20" />
+          <p>Chọn bộ lọc rồi bấm <span className="text-foreground font-medium">Tìm kiếm</span> để xem dữ liệu.</p>
         </div>
       ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 text-slate-500 text-sm gap-2">
-          <Trash2 size={32} className="opacity-30" />
-          <p>Không có bản ghi nào phù hợp với bộ lọc. Dữ liệu đã sạch!</p>
+        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
+          <Trash2 size={32} className="opacity-20" />
+          <p>Không có bản ghi nào phù hợp. Dữ liệu đã sạch!</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="bg-white rounded-2xl border border-border shadow-sm space-y-3 overflow-hidden">
           {/* Thông tin tổng */}
-          <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-4 pt-4">
             <span>
               Hiển thị{" "}
-              <span className="text-white font-semibold">{(page - 1) * ITEMS_PER_PAGE + 1}</span>–
-              <span className="text-white font-semibold">
+              <span className="text-foreground font-semibold">{(page - 1) * ITEMS_PER_PAGE + 1}</span>–
+              <span className="text-foreground font-semibold">
                 {Math.min(page * ITEMS_PER_PAGE, rows.length)}
               </span>{" "}
-              / <span className="text-white font-semibold">{rows.length}</span> bản ghi
+              / <span className="text-foreground font-semibold">{rows.length}</span> bản ghi
               {hasDateFilter && (
-                <span className="ml-2 text-amber-400">
+                <span className="ml-2 text-amber-600">
                   ({dateFrom || "đầu"} → {dateTo || "cuối"})
                 </span>
               )}
             </span>
-            <span className="text-slate-500">Trang {page}/{totalPages}</span>
+            <span>Trang {page}/{totalPages}</span>
           </div>
 
           {/* Bảng */}
-          <div className="overflow-x-auto rounded-xl border border-slate-700">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#1e2130] border-b border-slate-700">
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 w-8">#</th>
+                <tr className="bg-muted/50 border-y border-border">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground w-8">#</th>
                   {currentOption?.columns.map((col) => (
-                    <th key={col} className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">
+                    <th key={col} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                       {col}
                     </th>
                   ))}
@@ -456,13 +449,13 @@ export function CleanupTab() {
                   return (
                     <tr
                       key={String(row.id ?? idx)}
-                      className="border-b border-slate-800 hover:bg-slate-800/50 transition"
+                      className="border-b border-border last:border-0 hover:bg-muted/30 transition"
                     >
-                      <td className="px-3 py-2.5 text-slate-500 text-xs">
+                      <td className="px-3 py-2.5 text-muted-foreground text-xs">
                         {(page - 1) * ITEMS_PER_PAGE + idx + 1}
                       </td>
                       {cells.map((cell, ci) => (
-                        <td key={ci} className="px-3 py-2.5 text-slate-300 whitespace-nowrap text-xs">
+                        <td key={ci} className="px-3 py-2.5 text-foreground whitespace-nowrap text-xs">
                           {cell ?? "—"}
                         </td>
                       ))}
@@ -475,11 +468,11 @@ export function CleanupTab() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 px-4 pb-4">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition disabled:opacity-30"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground text-xs transition disabled:opacity-30"
               >
                 <ChevronLeft size={14} /> Trước
               </button>
@@ -494,15 +487,15 @@ export function CleanupTab() {
                   }, [])
                   .map((p, i) =>
                     p === "..." ? (
-                      <span key={`ellipsis-${i}`} className="px-2 py-1.5 text-slate-500 text-xs">…</span>
+                      <span key={`ellipsis-${i}`} className="px-2 py-1.5 text-muted-foreground text-xs">…</span>
                     ) : (
                       <button
                         key={p}
                         onClick={() => setPage(p as number)}
                         className={`w-7 h-7 rounded-lg text-xs font-medium transition ${
                           page === p
-                            ? "bg-primary text-white"
-                            : "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                            ? "bg-primary text-primary-foreground"
+                            : "border border-border hover:bg-muted text-muted-foreground"
                         }`}
                       >
                         {p}
@@ -514,7 +507,7 @@ export function CleanupTab() {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition disabled:opacity-30"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground text-xs transition disabled:opacity-30"
               >
                 Tiếp <ChevronRight size={14} />
               </button>
