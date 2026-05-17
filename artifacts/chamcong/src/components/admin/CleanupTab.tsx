@@ -52,7 +52,7 @@ const DATA_OPTIONS: DataOption[] = [
   },
   {
     value: "job_applications",
-    label: "Đơn tuyển dụng",
+    label: "Quản lý ứng tuyển",
     table: "job_applications",
     dateField: "created_at",
     columns: ["Họ tên", "SĐT", "Người giới thiệu", "Trạng thái", "Ngày gửi"],
@@ -66,7 +66,7 @@ const DATA_OPTIONS: DataOption[] = [
   },
   {
     value: "reconciliations",
-    label: "Đối soát lương",
+    label: "Đối soát",
     table: "reconciliations",
     dateField: "created_at",
     columns: ["Mã NV", "Họ tên", "Ngày làm", "Ca", "Tổng lương", "Ngày tạo"],
