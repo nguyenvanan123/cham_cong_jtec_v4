@@ -89,6 +89,8 @@ export default function UngTuyen() {
   const [frontPreview, setFrontPreview] = useState<string | null>(null);
   const [backPreview, setBackPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Cooldown 5 giây để chống spam form
+  const [submitCooldown, setSubmitCooldown] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [showSql, setShowSql] = useState(false);
@@ -116,12 +118,38 @@ export default function UngTuyen() {
   const clearFront = () => { setFrontFile(null); setFrontPreview(null); };
   const clearBack = () => { setBackFile(null); setBackPreview(null); };
 
+  // Regex kiểm tra số điện thoại Việt Nam (đầu số 03x, 05x, 07x, 08x, 09x)
+  const VN_PHONE_REGEX = /^(0[3|5|7|8|9])+([0-9]{8})$/;
+  // Regex kiểm tra số tài khoản ngân hàng (chỉ chứa số)
+  const BANK_ACCOUNT_REGEX = /^[0-9]+$/;
+  // Hàm loại bỏ thẻ HTML để chống XSS
+  const sanitize = (str: string) => str.replace(/<[^>]*>/g, "").replace(/[<>"'`]/g, "").trim();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Ngăn chặn spam: nếu đang trong cooldown hoặc đang submit thì bỏ qua
+    if (submitting || submitCooldown) return;
     setError("");
     setShowSql(false);
-    if (!fullName.trim()) { setError("Vui lòng nhập họ tên."); return; }
-    if (!phone.trim()) { setError("Vui lòng nhập số điện thoại."); return; }
+
+    // Xác thực + làm sạch dữ liệu đầu vào
+    const cleanFullName = sanitize(fullName);
+    const cleanPhone = sanitize(phone);
+    const cleanReferrerName = sanitize(referrerName);
+    const cleanReferrerId = sanitize(referrerId);
+    const cleanReferrerBankAccount = sanitize(referrerBankAccount);
+    const cleanReferrerBankName = sanitize(referrerBankName);
+
+    if (!cleanFullName) { setError("Vui lòng nhập họ tên."); return; }
+    if (!cleanPhone) { setError("Vui lòng nhập số điện thoại."); return; }
+    if (!VN_PHONE_REGEX.test(cleanPhone)) {
+      setError("Số điện thoại không đúng định dạng Việt Nam (VD: 0901234567).");
+      return;
+    }
+    if (cleanReferrerBankAccount && !BANK_ACCOUNT_REGEX.test(cleanReferrerBankAccount)) {
+      setError("Số tài khoản ngân hàng chỉ được chứa chữ số.");
+      return;
+    }
     if (!frontFile || !backFile) { setError("Vui lòng chọn cả 2 mặt CCCD."); return; }
 
     setSubmitting(true);
@@ -148,18 +176,20 @@ export default function UngTuyen() {
       return;
     }
 
-    const { error: insertErr } = await supabase.from("job_applications").insert({
-      full_name: fullName.trim(),
-      phone: phone.trim(),
-      referrer_name: referrerName.trim(),
-      referrer_id: referrerId.trim(),
-      referrer_bank_account: referrerBankAccount.trim(),
-      referrer_bank_name: referrerBankName.trim(),
-      bank_account: "",
-      cccd_front_url: frontName,
-      cccd_back_url: backName,
-      status: "pending",
-    });
+    const { error: insertErr } = await Promise.resolve(
+      supabase.from("job_applications").insert({
+        full_name: cleanFullName,
+        phone: cleanPhone,
+        referrer_name: cleanReferrerName,
+        referrer_id: cleanReferrerId,
+        referrer_bank_account: cleanReferrerBankAccount,
+        referrer_bank_name: cleanReferrerBankName,
+        bank_account: "",
+        cccd_front_url: frontName,
+        cccd_back_url: backName,
+        status: "pending",
+      })
+    );
 
     if (insertErr) {
       setError(`[DB Insert] ${insertErr.message}`);
@@ -170,6 +200,10 @@ export default function UngTuyen() {
 
     setSubmitting(false);
     setSuccess(true);
+
+    // Kích hoạt cooldown 5 giây chống spam sau khi submit thành công
+    setSubmitCooldown(true);
+    setTimeout(() => setSubmitCooldown(false), 5000);
 
     if (shopeeLink && affiliateStatus === "on") {
       if (affiliateShowPopup === "on") {
@@ -365,11 +399,13 @@ export default function UngTuyen() {
           <button
             type="submit"
             data-testid="btn-submit"
-            disabled={submitting}
+            disabled={submitting || submitCooldown}
             className="w-full py-4 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {submitting ? (
               <><RefreshCw size={18} className="animate-spin" />Đang gửi hồ sơ...</>
+            ) : submitCooldown ? (
+              <><RefreshCw size={18} className="animate-spin" />Vui lòng chờ...</>
             ) : (
               <><Send size={18} />Nộp đơn ứng tuyển</>
             )}

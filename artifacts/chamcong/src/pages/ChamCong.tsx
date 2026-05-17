@@ -46,6 +46,8 @@ export default function ChamCong() {
   const [compressing, setCompressing] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
+  // Cooldown 5 giây để chống spam form
+  const [submitCooldown, setSubmitCooldown] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerStatus, setBannerStatus] = useState("off");
@@ -177,6 +179,8 @@ export default function ChamCong() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Ngăn chặn spam: nếu đang trong cooldown hoặc đang submit thì bỏ qua
+    if (submitting || submitCooldown) return;
     if (!employeeId.trim() || !fullName.trim()) {
       showToast("error", "Vui lòng nhập đầy đủ Mã NV và Tên.");
       return;
@@ -217,65 +221,53 @@ export default function ChamCong() {
     };
 
     try {
-     const inserts: Promise<void>[] = [];
+      const inserts: Promise<void>[] = [];
 
-if (!hasCheckIn) {
-  const ciUrl = await uploadPhoto(checkInBlob, "check-in");
-inserts.push(
-  Promise.resolve(
-    supabase.from("attendance").insert({
-      employee_id: eid,
-      full_name: fullName.trim(),
-      work_date: workDate,
-      shift,
-      action_type: "check-in",
-      image_url: ciUrl,
-    }).then(({ error }) => { 
-      if (error) throw new Error("Lỗi lưu check-in: " + error.message); 
-    })
-  )
-);
-}
+      // Lưu check-in nếu chưa có
+      if (!hasCheckIn) {
+        const ciUrl = await uploadPhoto(checkInBlob, "check-in");
+        inserts.push(
+          Promise.resolve(
+            supabase.from("attendance").insert({
+              employee_id: eid,
+              full_name: fullName.trim(),
+              work_date: workDate,
+              shift,
+              action_type: "check-in",
+              image_url: ciUrl,
+            }).then(({ error }) => {
+              if (error) throw new Error("Lỗi lưu check-in: " + error.message);
+            })
+          )
+        );
+      }
 
-if (!hasCheckOut) {
-const coUrl = await uploadPhoto(checkOutBlob, "check-out");
-inserts.push(
-  Promise.resolve(
-    supabase.from("attendance").insert({
-      employee_id: eid,
-      full_name: fullName.trim(),
-      work_date: workDate,
-      shift,
-      action_type: "check-out",
-      image_url: coUrl,
-    }).then(({ error }) => { 
-      if (error) throw new Error("Lỗi lưu check-out: " + error.message); 
-    })
-  )
-);
-}
+      // Lưu check-out nếu chưa có
+      if (!hasCheckOut) {
+        const coUrl = await uploadPhoto(checkOutBlob, "check-out");
+        inserts.push(
+          Promise.resolve(
+            supabase.from("attendance").insert({
+              employee_id: eid,
+              full_name: fullName.trim(),
+              work_date: workDate,
+              shift,
+              action_type: "check-out",
+              image_url: coUrl,
+            }).then(({ error }) => {
+              if (error) throw new Error("Lỗi lưu check-out: " + error.message);
+            })
+          )
+        );
+      }
 
-if (!hasCheckOut) {
-  const coUrl = await uploadPhoto(checkOutBlob, "check-out");
-  inserts.push(
-    // Bọc tương tự cho phần check-out
-    Promise.resolve(
-      supabase.from("attendance").insert({
-        employee_id: eid,
-        full_name: fullName.trim(),
-        work_date: workDate,
-        shift,
-        action_type: "check-out",
-        image_url: coUrl,
-      }).then(({ error }) => { 
-        if (error) throw new Error("Lỗi lưu check-out: " + error.message); 
-      })
-    )
-  );
-}
       await Promise.all(inserts);
       showToast("success", "Chấm công thành công! Check-in & Check-out đã được lưu.");
       resetPhotos();
+
+      // Kích hoạt cooldown 5 giây chống spam sau khi submit thành công
+      setSubmitCooldown(true);
+      setTimeout(() => setSubmitCooldown(false), 5000);
 
       if (shopeeLink && affiliateStatus === "on") {
         if (affiliateShowPopup === "on") {
@@ -477,13 +469,18 @@ if (!hasCheckOut) {
           <button
             type="submit"
             data-testid="btn-submit"
-            disabled={submitting || !photosReady}
+            disabled={submitting || submitCooldown || !photosReady}
             className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
                 Đang gửi...
+              </>
+            ) : submitCooldown ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Vui lòng chờ...
               </>
             ) : (
               <>

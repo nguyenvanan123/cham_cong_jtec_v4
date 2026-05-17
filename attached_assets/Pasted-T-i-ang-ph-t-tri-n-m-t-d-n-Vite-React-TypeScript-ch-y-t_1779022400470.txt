@@ -1,0 +1,19 @@
+Tôi đang phát triển một dự án Vite + React (TypeScript) chạy trên Local và Deploy lên Netlify, sử dụng cơ sở dữ liệu Supabase. Hãy rà soát mã nguồn và tiến hành nâng cấp đồng thời hai hạng mục lớn sau đây:
+
+HẠNG MỤC 1: NÂNG CẤP BẢO MẬT FRONTEND
+1. Chống Spam Form: Tại tất cả các nút bấm gửi dữ liệu (nút "Chấm công", nút "Gửi đơn giới thiệu"), hãy thêm logic vô hiệu hóa (disable) nút ngay khi nhấn. Đồng thời thiết lập thời gian chờ (cooldown/debounce) 5 giây để ngăn chặn người dùng cố tình click liên tục nhằm spam phá hoại hệ thống.
+2. Bảo vệ biến môi trường: Đảm bảo không có bất kỳ Key bảo mật nào của Supabase bị ghi trực tiếp (hardcode) vào mã nguồn. Tất cả phải được gọi thông qua biến môi trường chuẩn của Vite là `import.meta.env.VITE_SUPABASE_URL` và `import.meta.env.VITE_SUPABASE_ANON_KEY`.
+3. Xác thực dữ liệu đầu vào (Input Validation): Thêm regex kiểm tra số điện thoại (chuẩn định dạng Việt Nam) và số tài khoản ngân hàng (chỉ chứa số) ở form tuyển dụng. Tiến hành loại bỏ các ký tự lạ hoặc script để chống tấn công XSS.
+
+HẠNG MỤC 2: XÂY DỰNG TÍNH NĂNG "DỌN DẸP DỮ LIỆU" CHO TRANG ADMIN
+1. Cấu trúc trang mới: Tạo một trang mới có tên là Dọn dẹp (Cleanup). Trang này thuộc phân hệ Admin, sử dụng giao diện tối (Dark Mode) đồng bộ với Tailwind CSS.
+2. Bộ lọc Option: Tạo một thẻ <select> làm bộ lọc gồm các tùy chọn tính năng: "Dữ liệu chấm công", "Quản lý ca làm", và "Đơn tuyển dụng". Lưu ý: Tuyệt đối không hiển thị trang "Cài đặt" và "Tổng quan ngày" vào bộ lọc này để tránh xóa nhầm dữ liệu hệ thống.
+3. Phân trang thông minh: Khi Admin chọn một option, hãy kéo dữ liệu tương ứng từ Supabase về và hiển thị lên bảng. Bảng này phải giới hạn hiển thị tối đa 15 bản ghi trên mỗi trang (15 items per page) và có các nút điều hướng chuyển trang (Pagination).
+4. Logic nút Dọn dẹp & Popup xác nhận: 
+   - Nút "Dọn dẹp" mặc định sẽ bị mờ (disabled). Nút này chỉ sáng lên khi bộ lọc đã chọn và bảng hiển thị có dữ liệu (số bản ghi lớn hơn 0).
+   - Khi Admin bấm nút "Dọn dẹp", hiển thị một Popup (Modal) cảnh báo thông minh. Nội dung popup phải đếm chính xác số lượng bản ghi đã được lọc ra, ví dụ: "Bạn có chắc muốn xóa 5 bản ghi?".
+   - Popup có 2 tùy chọn rõ ràng: Bấm "Ok" sẽ kích hoạt lệnh `.delete()` xóa vĩnh viễn các bản ghi đã lọc trên Supabase; bấm "Cancel" sẽ đóng popup một cách an toàn và giữ nguyên dữ liệu.
+
+LƯU Ý QUAN TRỌNG VỀ CODE CHO MAC M1 (ARM):
+- Hãy bọc tất cả các hàm tương tác với cơ sở dữ liệu như `supabase.from().insert()` hoặc `.delete()` trong `Promise.resolve()` để tránh lỗi Typecheck nghiêm ngặt (PromiseLike) khi tôi build dự án trên máy MacBook Air M1.
+- Viết code sạch, chia component rõ ràng và chú thích đầy đủ bằng tiếng Việt.

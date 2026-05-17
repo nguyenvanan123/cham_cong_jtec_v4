@@ -16,12 +16,13 @@ import {
 import { ShiftsTab } from "@/components/admin/ShiftsTab";
 import { ReconciliationTab } from "@/components/admin/ReconciliationTab";
 import { ExportTab } from "@/components/admin/ExportTab";
+import { CleanupTab } from "@/components/admin/CleanupTab";
 
 // ──────────────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────────────
 type FilterStatus = "all" | "complete" | "incomplete";
-type Tab = "overview" | "records" | "applications" | "settings" | "shifts" | "reconciliation" | "export";
+type Tab = "overview" | "records" | "applications" | "settings" | "shifts" | "reconciliation" | "export" | "cleanup";
 
 type GroupedEmployee = {
   employee_id: string;
@@ -1629,6 +1630,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     { id: "shifts", label: "Quản lý ca làm", icon: <Layers size={18} /> },
     { id: "reconciliation", label: "Đối soát", icon: <CalendarCheck size={18} /> },
     { id: "export", label: "Xuất dữ liệu", icon: <FileSpreadsheet size={18} /> },
+    { id: "cleanup", label: "Dọn dẹp", icon: <Trash2 size={18} /> },
   ];
 
   return (
@@ -1720,6 +1722,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               {activeTab === "shifts" && <ShiftsTab />}
               {activeTab === "reconciliation" && <ReconciliationTab allRecords={allRecords} />}
               {activeTab === "export" && <ExportTab />}
+              {activeTab === "cleanup" && <CleanupTab />}
             </>
           )}
         </main>
