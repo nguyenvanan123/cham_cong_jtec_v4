@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
-import type { AttendanceRecord, Config } from "@/lib/supabase";
+import type { AttendanceRecord, Config, Shift } from "@/lib/supabase";
 import { Link } from "wouter";
 import {
   Camera, Send, CheckCircle, XCircle, AlertCircle,
@@ -9,12 +9,6 @@ import {
   Upload, ImagePlus, Loader2, CheckCheck, Phone
 } from "lucide-react";
 
-const SHIFTS = [
-  "Ca sáng (6:00 - 14:00)",
-  "Ca chiều (14:00 - 22:00)",
-  "Ca tối (22:00 - 6:00)",
-  "Hành chính (8:00 - 17:00)",
-];
 
 const COMPRESS_OPTIONS = {
   maxSizeMB: 0.3,
@@ -34,7 +28,8 @@ export default function ChamCong() {
   const [employeeId, setEmployeeId] = useState("");
   const [fullName, setFullName] = useState("");
   const [workDate, setWorkDate] = useState(today());
-  const [shift, setShift] = useState(SHIFTS[0]);
+  const [shift, setShift] = useState("");
+  const [dbShifts, setDbShifts] = useState<Shift[]>([]);
 
   const [checkInBlob, setCheckInBlob] = useState<Blob | null>(null);
   const [checkOutBlob, setCheckOutBlob] = useState<Blob | null>(null);
@@ -100,6 +95,21 @@ export default function ChamCong() {
         setAttendanceCloseTime(closeT);
         setClosedMessage(closedMsg);
         setZaloAdminLink(zalo);
+      });
+  }, []);
+
+  // Tải danh sách ca từ Supabase (Admin quản lý)
+  useEffect(() => {
+    supabase
+      .from("shifts")
+      .select("*")
+      .order("created_at")
+      .then(({ data }) => {
+        const shifts = (data ?? []) as Shift[];
+        setDbShifts(shifts);
+        if (shifts.length > 0) {
+          setShift(`${shifts[0].name} (${shifts[0].start_time} - ${shifts[0].end_time})`);
+        }
       });
   }, []);
 
@@ -404,11 +414,17 @@ export default function ChamCong() {
                 data-testid="select-shift"
                 value={shift}
                 onChange={(e) => setShift(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition disabled:opacity-50"
+                disabled={dbShifts.length === 0}
               >
-                {SHIFTS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
+                {dbShifts.length === 0 ? (
+                  <option value="">Đang tải ca làm việc...</option>
+                ) : (
+                  dbShifts.map((s) => {
+                    const val = `${s.name} (${s.start_time} - ${s.end_time})`;
+                    return <option key={s.id} value={val}>{val}</option>;
+                  })
+                )}
               </select>
             </div>
           </div>
