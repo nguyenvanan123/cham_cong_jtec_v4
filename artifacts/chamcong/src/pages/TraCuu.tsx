@@ -92,7 +92,9 @@ export default function TraCuu() {
       <header className="bg-white/80 backdrop-blur-md border-b border-indigo-100 sticky top-0 z-30">
         <div className="max-w-lg mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <ArrowLeft size={18} className="text-muted-foreground flex-shrink-0" />
+            <Link href="/" className="p-1.5 -ml-1 rounded-lg hover:bg-accent transition flex-shrink-0 text-muted-foreground hover:text-foreground">
+              <ArrowLeft size={18} />
+            </Link>
             <span className="font-bold text-foreground text-base sm:text-lg truncate">Tra Cứu</span>
           </div>
           <nav className="flex gap-0.5 sm:gap-1 flex-shrink-0">
