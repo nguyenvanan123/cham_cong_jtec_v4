@@ -19,6 +19,84 @@ const COMPRESS_OPTIONS = {
   initialQuality: 0.85,
 };
 
+async function compressVideo(file: File): Promise<Blob> {
+  return new Promise((resolve) => {
+    const supported =
+      typeof window !== "undefined" &&
+      window.MediaRecorder &&
+      (MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ||
+        MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ||
+        MediaRecorder.isTypeSupported("video/webm"));
+    if (!supported) { resolve(file); return; }
+
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    const src = URL.createObjectURL(file);
+    video.src = src;
+
+    video.onloadedmetadata = () => {
+      try {
+        const maxDim = 720;
+        const vw = video.videoWidth || maxDim;
+        const vh = video.videoHeight || maxDim;
+        const scale = Math.min(1, maxDim / Math.max(vw, vh));
+        const w = Math.max(2, Math.round(vw * scale));
+        const h = Math.max(2, Math.round(vh * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d")!;
+        const stream = canvas.captureStream(24);
+
+        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+          ? "video/webm;codecs=vp9"
+          : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+          ? "video/webm;codecs=vp8"
+          : "video/webm";
+
+        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 800_000 });
+        const chunks: BlobPart[] = [];
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+        let animFrame: number;
+        const drawFrame = () => {
+          if (!video.paused && !video.ended) {
+            ctx.drawImage(video, 0, 0, w, h);
+            animFrame = requestAnimationFrame(drawFrame);
+          }
+        };
+
+        const timeout = setTimeout(() => {
+          cancelAnimationFrame(animFrame);
+          if (recorder.state === "recording") recorder.stop();
+        }, (video.duration || 60) * 1000 + 5000);
+
+        recorder.onstop = () => {
+          clearTimeout(timeout);
+          URL.revokeObjectURL(src);
+          const result = new Blob(chunks, { type: "video/webm" });
+          resolve(result.size > 0 && result.size < file.size ? result : file);
+        };
+
+        recorder.start(100);
+        video.play().then(() => { drawFrame(); }).catch(() => { if (recorder.state === "recording") recorder.stop(); });
+        video.onended = () => {
+          cancelAnimationFrame(animFrame);
+          ctx.drawImage(video, 0, 0, w, h);
+          if (recorder.state === "recording") recorder.stop();
+        };
+      } catch {
+        URL.revokeObjectURL(src);
+        resolve(file);
+      }
+    };
+    video.onerror = () => { URL.revokeObjectURL(src); resolve(file); };
+  });
+}
+
 function today() {
   return new Date().toISOString().split("T")[0];
 }
@@ -45,6 +123,7 @@ export default function ChamCong() {
   const [uploadPopupOpen, setUploadPopupOpen] = useState(false);
   const [uploadStep, setUploadStep] = useState<UploadStep>(1);
   const [compressing, setCompressing] = useState(false);
+  const [compressingMsg, setCompressingMsg] = useState("Đang nén ảnh...");
 
   const [submitting, setSubmitting] = useState(false);
   // Cooldown 5 giây để chống spam form
@@ -184,33 +263,41 @@ export default function ChamCong() {
     }
   };
 
-  const handleCheckInVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCheckInVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 100 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
+    if (file.size > 200 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 200MB.");
       e.target.value = "";
       return;
     }
-    setCheckInVideoBlob(file);
-    setCheckInVideoPreview(URL.createObjectURL(file));
-    setUploadStep(2);
     e.target.value = "";
+    setCompressingMsg("Đang nén video check-in...");
+    setCompressing(true);
+    const compressed = await compressVideo(file);
+    setCompressing(false);
+    setCheckInVideoBlob(compressed);
+    setCheckInVideoPreview(URL.createObjectURL(compressed));
+    setUploadStep(2);
   };
 
-  const handleCheckOutVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCheckOutVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 100 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
+    if (file.size > 200 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 200MB.");
       e.target.value = "";
       return;
     }
-    setCheckOutVideoBlob(file);
-    setCheckOutVideoPreview(URL.createObjectURL(file));
+    e.target.value = "";
+    setCompressingMsg("Đang nén video check-out...");
+    setCompressing(true);
+    const compressed = await compressVideo(file);
+    setCompressing(false);
+    setCheckOutVideoBlob(compressed);
+    setCheckOutVideoPreview(URL.createObjectURL(compressed));
     setUploadStep("done");
     setTimeout(() => setUploadPopupOpen(false), 800);
-    e.target.value = "";
   };
 
   const resetPhotos = () => {
@@ -594,7 +681,7 @@ export default function ChamCong() {
               {compressing && (
                 <div className="flex flex-col items-center gap-3 py-4">
                   <Loader2 size={32} className="animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground font-medium">Đang nén ảnh...</p>
+                  <p className="text-sm text-muted-foreground font-medium">{compressingMsg}</p>
                 </div>
               )}
 

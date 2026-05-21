@@ -1,10 +1,19 @@
 import { useState, useRef, useEffect } from "react";
+import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 import { Link } from "wouter";
 import {
   ArrowLeft, Upload, CheckCircle, RefreshCw, Send,
-  User, CreditCard, Banknote, Users, ImagePlus, X, Phone
+  User, CreditCard, Banknote, Users, ImagePlus, X, Phone, Loader2
 } from "lucide-react";
+
+const CCCD_COMPRESS_OPTIONS = {
+  maxSizeMB: 0.5,
+  maxWidthOrHeight: 1600,
+  useWebWorker: true,
+  fileType: "image/jpeg",
+  initialQuality: 0.85,
+};
 
 const SQL_FIX = `-- Chạy trong Supabase SQL Editor để sửa lỗi upload/lưu đơn:
 
@@ -27,19 +36,25 @@ CREATE POLICY "allow_anon_select" ON storage.objects
   USING (bucket_id = 'application_docs');`;
 
 function ImageUploadBox({
-  label, file, onChange, preview, onClear
+  label, file, onChange, preview, onClear, loading
 }: {
   label: string;
   file: File | null;
   onChange: (f: File) => void;
   preview: string | null;
   onClear: () => void;
+  loading?: boolean;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div>
       <label className="text-sm font-medium text-muted-foreground mb-1.5 block">{label}</label>
-      {preview ? (
+      {loading ? (
+        <div className="w-full aspect-video rounded-xl border border-border bg-accent/30 flex flex-col items-center justify-center gap-2">
+          <Loader2 size={24} className="animate-spin text-primary" />
+          <span className="text-xs text-muted-foreground">Đang nén ảnh...</span>
+        </div>
+      ) : preview ? (
         <div className="relative rounded-xl overflow-hidden border border-border aspect-video bg-muted">
           <img src={preview} alt={label} className="w-full h-full object-contain" />
           <button
@@ -88,6 +103,8 @@ export default function UngTuyen() {
   const [backFile, setBackFile] = useState<File | null>(null);
   const [frontPreview, setFrontPreview] = useState<string | null>(null);
   const [backPreview, setBackPreview] = useState<string | null>(null);
+  const [compressingFront, setCompressingFront] = useState(false);
+  const [compressingBack, setCompressingBack] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   // Cooldown 5 giây để chống spam form
   const [submitCooldown, setSubmitCooldown] = useState(false);
@@ -113,8 +130,32 @@ export default function UngTuyen() {
       });
   }, []);
 
-  const handleFront = (f: File) => { setFrontFile(f); setFrontPreview(URL.createObjectURL(f)); };
-  const handleBack = (f: File) => { setBackFile(f); setBackPreview(URL.createObjectURL(f)); };
+  const handleFront = async (f: File) => {
+    setCompressingFront(true);
+    try {
+      const compressed = await imageCompression(f, CCCD_COMPRESS_OPTIONS);
+      setFrontFile(compressed as File);
+      setFrontPreview(URL.createObjectURL(compressed));
+    } catch {
+      setFrontFile(f);
+      setFrontPreview(URL.createObjectURL(f));
+    } finally {
+      setCompressingFront(false);
+    }
+  };
+  const handleBack = async (f: File) => {
+    setCompressingBack(true);
+    try {
+      const compressed = await imageCompression(f, CCCD_COMPRESS_OPTIONS);
+      setBackFile(compressed as File);
+      setBackPreview(URL.createObjectURL(compressed));
+    } catch {
+      setBackFile(f);
+      setBackPreview(URL.createObjectURL(f));
+    } finally {
+      setCompressingBack(false);
+    }
+  };
   const clearFront = () => { setFrontFile(null); setFrontPreview(null); };
   const clearBack = () => { setBackFile(null); setBackPreview(null); };
 
@@ -378,8 +419,8 @@ export default function UngTuyen() {
               <CreditCard size={16} className="text-primary" />
               <h2 className="font-semibold text-foreground text-sm">Ảnh CCCD / CMND *</h2>
             </div>
-            <ImageUploadBox label="Mặt trước" file={frontFile} onChange={handleFront} preview={frontPreview} onClear={clearFront} />
-            <ImageUploadBox label="Mặt sau" file={backFile} onChange={handleBack} preview={backPreview} onClear={clearBack} />
+            <ImageUploadBox label="Mặt trước" file={frontFile} onChange={handleFront} preview={frontPreview} onClear={clearFront} loading={compressingFront} />
+            <ImageUploadBox label="Mặt sau" file={backFile} onChange={handleBack} preview={backPreview} onClear={clearBack} loading={compressingBack} />
           </div>
 
           {/* Error */}
