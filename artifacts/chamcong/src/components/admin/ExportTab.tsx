@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Reconciliation } from "@/lib/supabase";
-import { Download, RefreshCw, FileSpreadsheet, X, Trash2 } from "lucide-react";
+import { Download, RefreshCw, FileSpreadsheet, X, Trash2, Search } from "lucide-react";
 
 function yesterday() {
   const d = new Date(); d.setDate(d.getDate() - 1);
@@ -39,6 +39,8 @@ export function ExportTab() {
   const [loading, setLoading] = useState(false);
   const [dbError, setDbError] = useState(false);
   const [modalImg, setModalImg] = useState<string | null>(null);
+  const [modalImgLabel, setModalImgLabel] = useState<string>("");
+  const [modalImgZoomed, setModalImgZoomed] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [hoursFilter, setHoursFilter] = useState<HoursFilter>("all");
   const [showNotes, setShowNotes] = useState(false);
@@ -58,6 +60,14 @@ export function ExportTab() {
   }, [from, to]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setModalImg(null); setModalImgZoomed(false); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const filtered = records.filter(r => {
     if (hoursFilter === "all") return true;
@@ -297,12 +307,12 @@ export function ExportTab() {
                       <td className="px-3 py-3">
                         <div className="flex gap-1">
                           {r.check_in_image && (
-                            <button onClick={() => setModalImg(r.check_in_image)} className="w-7 h-7 rounded-lg overflow-hidden border border-green-200 hover:ring-2 hover:ring-green-400 transition">
+                            <button onClick={() => { setModalImg(r.check_in_image); setModalImgLabel(`Check-in — ${r.full_name} (${r.work_date})`); setModalImgZoomed(false); }} className="w-7 h-7 rounded-lg overflow-hidden border border-green-200 hover:ring-2 hover:ring-green-400 transition">
                               <img src={r.check_in_image} className="w-full h-full object-cover" />
                             </button>
                           )}
                           {r.check_out_image && (
-                            <button onClick={() => setModalImg(r.check_out_image)} className="w-7 h-7 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-400 transition">
+                            <button onClick={() => { setModalImg(r.check_out_image); setModalImgLabel(`Check-out — ${r.full_name} (${r.work_date})`); setModalImgZoomed(false); }} className="w-7 h-7 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-400 transition">
                               <img src={r.check_out_image} className="w-full h-full object-cover" />
                             </button>
                           )}
@@ -333,13 +343,44 @@ export function ExportTab() {
       </div>
 
       {modalImg && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setModalImg(null)}>
-          <div className="relative max-w-lg w-full" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setModalImg(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg z-10">
-              <X size={16} />
-            </button>
-            <img src={modalImg} className="w-full rounded-2xl shadow-2xl" />
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center" onClick={() => { setModalImg(null); setModalImgZoomed(false); }}>
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10" onClick={e => e.stopPropagation()}>
+            <span className="text-white text-sm font-medium truncate">{modalImgLabel}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModalImgZoomed(z => !z)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+              >
+                <Search size={13} />
+                {modalImgZoomed ? "Thu nhỏ" : "Phóng to 100%"}
+              </button>
+              <a
+                href={modalImg}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+                onClick={e => e.stopPropagation()}
+              >
+                <Download size={13} />
+                Tải xuống
+              </a>
+              <button onClick={() => { setModalImg(null); setModalImgZoomed(false); }} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <X size={16} className="text-white" />
+              </button>
+            </div>
           </div>
+          <div
+            className={`relative flex items-center justify-center w-full h-full p-16 ${modalImgZoomed ? "overflow-auto cursor-zoom-out" : "cursor-zoom-in"}`}
+            onClick={e => { e.stopPropagation(); setModalImgZoomed(z => !z); }}
+          >
+            <img
+              src={modalImg}
+              alt="Ảnh đối soát"
+              className={`rounded-xl shadow-2xl transition-all duration-200 ${modalImgZoomed ? "max-w-none w-auto" : "max-w-full max-h-[80vh] object-contain"}`}
+            />
+          </div>
+          <p className="absolute bottom-4 text-white/50 text-xs">Nhấn ảnh để phóng to • ESC để đóng</p>
         </div>
       )}
     </div>

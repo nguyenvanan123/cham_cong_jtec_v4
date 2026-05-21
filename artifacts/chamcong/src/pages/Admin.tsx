@@ -246,6 +246,8 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   const [filterShift, setFilterShift] = useState("");
   const [dbShifts, setDbShifts] = useState<Shift[]>([]);
   const [modalImage, setModalImage] = useState<string | null>(null);
+  const [modalImageZoomed, setModalImageZoomed] = useState(false);
+  const [modalImageLabel, setModalImageLabel] = useState<string>("");
   const [modalVideo, setModalVideo] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -256,6 +258,18 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
     supabase.from("shifts").select("*").order("created_at").then(({ data }) => {
       setDbShifts((data || []) as Shift[]);
     });
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setModalImage(null);
+        setModalVideo(null);
+        setModalImageZoomed(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   const grouped = groupByEmployee(allRecords);
@@ -407,7 +421,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                         <td className="px-4 py-3">
                           <div className="flex gap-1 flex-wrap">
                             {images.map((img, i) => (
-                              <button key={i} onClick={() => setModalImage(img.url)}
+                              <button key={i} onClick={() => { setModalImage(img.url); setModalImageLabel(`Ảnh ${img.type} — ${g.full_name}`); setModalImageZoomed(false); }}
                                 className="relative w-8 h-8 rounded-lg overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition group">
                                 <img src={img.url} alt="ảnh" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
@@ -450,27 +464,82 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
         )}
       </div>
 
-      {/* Image Modal */}
+      {/* Image Modal — full HD lightbox */}
       {modalImage && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setModalImage(null)}>
-          <div className="relative max-w-lg w-full" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setModalImage(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-50 transition z-10">
-              <X size={16} />
-            </button>
-            <img src={modalImage} alt="Ảnh chấm công" className="w-full rounded-2xl shadow-2xl" />
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center" onClick={() => { setModalImage(null); setModalImageZoomed(false); }}>
+          {/* Toolbar */}
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10" onClick={e => e.stopPropagation()}>
+            <span className="text-white text-sm font-medium truncate">{modalImageLabel}</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModalImageZoomed(z => !z)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+              >
+                <Search size={13} />
+                {modalImageZoomed ? "Thu nhỏ" : "Phóng to 100%"}
+              </button>
+              <a
+                href={modalImage}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+                onClick={e => e.stopPropagation()}
+              >
+                <Download size={13} />
+                Tải xuống
+              </a>
+              <button onClick={() => { setModalImage(null); setModalImageZoomed(false); }} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <X size={16} className="text-white" />
+              </button>
+            </div>
           </div>
+          {/* Image */}
+          <div
+            className={`relative flex items-center justify-center w-full h-full p-16 ${modalImageZoomed ? "overflow-auto cursor-zoom-out" : "cursor-zoom-in"}`}
+            onClick={e => { e.stopPropagation(); setModalImageZoomed(z => !z); }}
+          >
+            <img
+              src={modalImage}
+              alt="Ảnh chấm công"
+              className={`rounded-xl shadow-2xl transition-all duration-200 ${modalImageZoomed ? "max-w-none w-auto" : "max-w-full max-h-[80vh] object-contain"}`}
+            />
+          </div>
+          <p className="absolute bottom-4 text-white/50 text-xs">Nhấn ảnh để phóng to • ESC để đóng</p>
         </div>
       )}
 
-      {/* Video Modal */}
+      {/* Video Modal — full HD */}
       {modalVideo && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={() => setModalVideo(null)}>
-          <div className="relative max-w-lg w-full" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setModalVideo(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-50 transition z-10">
-              <X size={16} />
-            </button>
-            <video src={modalVideo} controls autoPlay className="w-full rounded-2xl shadow-2xl bg-black" />
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center" onClick={() => setModalVideo(null)}>
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10" onClick={e => e.stopPropagation()}>
+            <span className="text-white text-sm font-medium">Video chấm công</span>
+            <div className="flex items-center gap-2">
+              <a
+                href={modalVideo}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+                onClick={e => e.stopPropagation()}
+              >
+                <Download size={13} />
+                Tải xuống
+              </a>
+              <button onClick={() => setModalVideo(null)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <X size={16} className="text-white" />
+              </button>
+            </div>
           </div>
+          <div className="w-full max-w-4xl px-4 pt-14 pb-10" onClick={e => e.stopPropagation()}>
+            <video
+              src={modalVideo}
+              controls
+              autoPlay
+              className="w-full max-h-[80vh] rounded-2xl shadow-2xl bg-black"
+            />
+          </div>
+          <p className="absolute bottom-4 text-white/50 text-xs">ESC để đóng</p>
         </div>
       )}
     </div>
