@@ -12,14 +12,37 @@ import {
 
 const STORAGE_KEY = "chamcong_last_employee";
 
+function getCompressOptions() {
+  const conn = (navigator as unknown as { connection?: { effectiveType?: string; downlink?: number } }).connection;
+  const effectiveType = conn?.effectiveType;
+  if (effectiveType === "slow-2g" || effectiveType === "2g") {
+    return { maxSizeMB: 0.15, maxWidthOrHeight: 800, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.65 };
+  }
+  if (effectiveType === "3g") {
+    return { maxSizeMB: 0.2, maxWidthOrHeight: 1024, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.75 };
+  }
+  return { maxSizeMB: 0.3, maxWidthOrHeight: 1280, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.85 };
+}
 
-const COMPRESS_OPTIONS = {
-  maxSizeMB: 0.3,
-  maxWidthOrHeight: 1280,
-  useWebWorker: true,
-  fileType: "image/jpeg",
-  initialQuality: 0.85,
-};
+async function retryUpload<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  onRetry?: (attempt: number) => void
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts) {
+        onRetry?.(attempt);
+        await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** (attempt - 1), 8000)));
+      }
+    }
+  }
+  throw lastError;
+}
 
 async function compressVideo(file: File): Promise<Blob> {
   return new Promise((resolve) => {
@@ -139,6 +162,8 @@ export default function ChamCong() {
   const [compressingMsg, setCompressingMsg] = useState("Đang nén ảnh...");
 
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Cooldown 5 giây để chống spam form
   const [submitCooldown, setSubmitCooldown] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
@@ -158,6 +183,18 @@ export default function ChamCong() {
   const [zaloAdminLink, setZaloAdminLink] = useState("");
   const [attendanceOpenTime, setAttendanceOpenTime] = useState("");
   const [attendanceCloseTime, setAttendanceCloseTime] = useState("");
+
+  // Theo dõi trạng thái mạng
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Khôi phục thông tin nhân viên từ lần trước
   useEffect(() => {
@@ -301,8 +338,9 @@ export default function ChamCong() {
     const file = e.target.files?.[0];
     if (!file) return;
     setCompressing(true);
+    setCompressingMsg("Đang nén ảnh check-in...");
     try {
-      const compressed = await imageCompression(file, COMPRESS_OPTIONS);
+      const compressed = await imageCompression(file, getCompressOptions());
       setCheckInBlob(compressed);
       setCheckInPreview(URL.createObjectURL(compressed));
       setUploadStep(2);
@@ -318,8 +356,9 @@ export default function ChamCong() {
     const file = e.target.files?.[0];
     if (!file) return;
     setCompressing(true);
+    setCompressingMsg("Đang nén ảnh check-out...");
     try {
-      const compressed = await imageCompression(file, COMPRESS_OPTIONS);
+      const compressed = await imageCompression(file, getCompressOptions());
       setCheckOutBlob(compressed);
       setCheckOutPreview(URL.createObjectURL(compressed));
       setUploadStep("done");
@@ -425,21 +464,33 @@ export default function ChamCong() {
 
     const uploadPhoto = async (blob: Blob, actionType: "check-in" | "check-out") => {
       const fileName = `${eid}_${workDate}_${actionType}_${ts}.jpg`;
-      const { error } = await supabase.storage
-        .from("checkin_photos")
-        .upload(fileName, blob, { contentType: "image/jpeg" });
-      if (error) throw new Error(`Lỗi upload ảnh ${actionType}: ` + error.message);
-      return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+      return retryUpload(
+        async () => {
+          const { error } = await supabase.storage
+            .from("checkin_photos")
+            .upload(fileName, blob, { contentType: "image/jpeg" });
+          if (error) throw new Error(`Lỗi upload ảnh ${actionType}: ` + error.message);
+          return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+        },
+        3,
+        (attempt) => setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`)
+      );
     };
 
     const uploadVideo = async (blob: Blob, actionType: "check-in" | "check-out") => {
       const ext = blob.type.split("/")[1]?.split(";")[0] || "mp4";
       const fileName = `${eid}_${workDate}_${actionType}_${ts}_video.${ext}`;
-      const { error } = await supabase.storage
-        .from("checkin_photos")
-        .upload(fileName, blob, { contentType: blob.type });
-      if (error) throw new Error(`Lỗi upload video ${actionType}: ` + error.message);
-      return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+      return retryUpload(
+        async () => {
+          const { error } = await supabase.storage
+            .from("checkin_photos")
+            .upload(fileName, blob, { contentType: blob.type });
+          if (error) throw new Error(`Lỗi upload video ${actionType}: ` + error.message);
+          return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+        },
+        3,
+        (attempt) => setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`)
+      );
     };
 
     try {
@@ -447,8 +498,10 @@ export default function ChamCong() {
 
       // Lưu check-in nếu chưa có
       if (!hasCheckIn) {
+        setUploadProgress("Đang upload ảnh check-in... (1/2)");
         const ciImageUrl = checkInBlob ? await uploadPhoto(checkInBlob, "check-in") : null;
-        const ciVideoUrl = checkInVideoBlob ? await uploadVideo(checkInVideoBlob, "check-in") : null;
+        const ciVideoUrl = checkInVideoBlob ? (setUploadProgress("Đang upload video check-in... (1/2)"), await uploadVideo(checkInVideoBlob, "check-in")) : null;
+        setUploadProgress("Đang lưu dữ liệu check-in...");
         inserts.push(
           Promise.resolve(
             supabase.from("attendance").insert({
@@ -468,8 +521,10 @@ export default function ChamCong() {
 
       // Lưu check-out nếu chưa có
       if (!hasCheckOut) {
+        setUploadProgress("Đang upload ảnh check-out... (2/2)");
         const coImageUrl = checkOutBlob ? await uploadPhoto(checkOutBlob, "check-out") : null;
-        const coVideoUrl = checkOutVideoBlob ? await uploadVideo(checkOutVideoBlob, "check-out") : null;
+        const coVideoUrl = checkOutVideoBlob ? (setUploadProgress("Đang upload video check-out... (2/2)"), await uploadVideo(checkOutVideoBlob, "check-out")) : null;
+        setUploadProgress("Đang lưu dữ liệu check-out...");
         inserts.push(
           Promise.resolve(
             supabase.from("attendance").insert({
@@ -487,6 +542,7 @@ export default function ChamCong() {
         );
       }
 
+      setUploadProgress("Hoàn tất, đang xác nhận...");
       await Promise.all(inserts);
       showToast("success", "Chấm công thành công! Check-in & Check-out đã được lưu.");
       resetPhotos();
@@ -524,9 +580,12 @@ export default function ChamCong() {
         }
       }
     } catch (err: unknown) {
-      showToast("error", err instanceof Error ? err.message : "Có lỗi xảy ra.");
+      const msg = err instanceof Error ? err.message : "Có lỗi xảy ra.";
+      const isNetErr = msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network") || !navigator.onLine;
+      showToast("error", isNetErr ? "Mất kết nối mạng. Vui lòng kiểm tra internet và thử lại." : msg);
     } finally {
       setSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -570,6 +629,13 @@ export default function ChamCong() {
           </nav>
         </div>
       </header>
+
+      {!isOnline && (
+        <div className="bg-red-600 text-white text-sm font-medium px-4 py-2.5 flex items-center justify-center gap-2">
+          <XCircle size={15} />
+          Không có kết nối internet — dữ liệu chưa được gửi. Vui lòng kiểm tra mạng rồi thử lại.
+        </div>
+      )}
 
       {banner && bannerStatus === "on" && (
         <div className="max-w-lg mx-auto px-4 pt-4">
@@ -760,24 +826,34 @@ export default function ChamCong() {
           <button
             type="submit"
             data-testid="btn-submit"
-            disabled={submitting || submitCooldown || !mediaReady}
-            className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            disabled={submitting || submitCooldown || !mediaReady || !isOnline}
+            className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex flex-col items-center justify-center gap-1"
           >
             {submitting ? (
               <>
-                <Loader2 size={18} className="animate-spin" />
-                Đang gửi...
+                <span className="flex items-center gap-2">
+                  <Loader2 size={18} className="animate-spin" />
+                  Đang gửi...
+                </span>
+                {uploadProgress && (
+                  <span className="text-xs font-normal opacity-80">{uploadProgress}</span>
+                )}
               </>
             ) : submitCooldown ? (
-              <>
+              <span className="flex items-center gap-2">
                 <Loader2 size={18} className="animate-spin" />
                 Vui lòng chờ...
-              </>
+              </span>
+            ) : !isOnline ? (
+              <span className="flex items-center gap-2">
+                <XCircle size={18} />
+                Mất kết nối — không thể gửi
+              </span>
             ) : (
-              <>
+              <span className="flex items-center gap-2">
                 <Send size={18} />
                 Gửi chấm công
-              </>
+              </span>
             )}
           </button>
         </form>
