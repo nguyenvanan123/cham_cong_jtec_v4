@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Shift, Reconciliation } from "@/lib/supabase";
-import { X, CheckCircle, Clock, Banknote, CalendarCheck, RefreshCw, Search, Save, AlertCircle, ZoomIn } from "lucide-react";
+import { X, CheckCircle, Clock, Banknote, CalendarCheck, RefreshCw, Search, Save, AlertCircle, ZoomIn, Play } from "lucide-react";
 
 type Group = {
   employee_id: string;
@@ -75,6 +75,8 @@ ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS bank_account TEXT DEFAULT '
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS bank_name TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_in_image TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_image TEXT DEFAULT '';
+ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_in_video TEXT DEFAULT '';
+ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_video TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS employee_type CHAR(1) DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
 
@@ -103,6 +105,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
+  const [lightboxVideo, setLightboxVideo] = useState<string | null>(null);
 
   const loadShifts = useCallback(async () => {
     const { data } = await supabase.from("shifts").select("*").order("created_at");
@@ -227,6 +230,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       bank_name: bankName,
       check_in_image: selected.checkIn?.image_url ?? "",
       check_out_image: selected.checkOut?.image_url ?? "",
+      check_in_video: selected.checkIn?.video_url ?? "",
+      check_out_video: selected.checkOut?.video_url ?? "",
       notes: notes,
     };
 
@@ -312,10 +317,13 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                             <CheckCircle size={11} />Đã xong
                           </span>
                         ) : complete ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">Đủ ảnh</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                            Đủ media
+                            {(g.checkIn?.video_url || g.checkOut?.video_url) && <Play size={9} />}
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
-                            <AlertCircle size={11} />Thiếu ảnh
+                            <AlertCircle size={11} />Thiếu media
                           </span>
                         )}
                       </td>
@@ -373,22 +381,36 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
 
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Ảnh Check-in", img: selected.checkIn?.image_url, border: "border-green-200" },
-                  { label: "Ảnh Check-out", img: selected.checkOut?.image_url, border: "border-blue-200" },
-                ].map(({ label, img, border }) => (
-                  <div key={label}>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>
+                {([
+                  { label: "Check-in", img: selected.checkIn?.image_url, vid: selected.checkIn?.video_url, imgBorder: "border-green-200", vidBorder: "border-green-300" },
+                  { label: "Check-out", img: selected.checkOut?.image_url, vid: selected.checkOut?.video_url, imgBorder: "border-blue-200", vidBorder: "border-blue-300" },
+                ] as { label: string; img?: string | null; vid?: string | null; imgBorder: string; vidBorder: string }[]).map(({ label, img, vid, imgBorder, vidBorder }) => (
+                  <div key={label} className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">{label}</p>
                     {img ? (
                       <div className="relative group cursor-pointer" onClick={() => setLightboxImg(img)}>
-                        <img src={img} alt={label} className={`w-full aspect-video object-cover rounded-xl border-2 ${border}`} />
+                        <img src={img} alt={label} className={`w-full aspect-video object-cover rounded-xl border-2 ${imgBorder}`} />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center">
-                          <ZoomIn size={24} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       </div>
                     ) : (
-                      <div className={`w-full aspect-video rounded-xl border-2 border-dashed ${border} bg-muted/30 flex items-center justify-center`}>
+                      <div className={`w-full aspect-video rounded-xl border-2 border-dashed ${imgBorder} bg-muted/20 flex items-center justify-center`}>
                         <p className="text-xs text-muted-foreground">Không có ảnh</p>
+                      </div>
+                    )}
+                    {vid ? (
+                      <div className="relative group cursor-pointer" onClick={() => setLightboxVideo(vid)}>
+                        <video src={vid} className={`w-full aspect-video object-cover rounded-xl border-2 ${vidBorder}`} muted playsInline />
+                        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 rounded-xl transition-all flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                            <Play size={14} className="text-gray-800 ml-0.5" />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`w-full aspect-video rounded-xl border-2 border-dashed ${vidBorder} bg-muted/10 flex items-center justify-center`}>
+                        <p className="text-xs text-muted-foreground">Không có video</p>
                       </div>
                     )}
                   </div>
@@ -547,6 +569,35 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
             className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
             onClick={e => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {lightboxVideo && (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/95 backdrop-blur-sm"
+          onClick={() => setLightboxVideo(null)}
+        >
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10" onClick={e => e.stopPropagation()}>
+            <span className="text-white text-sm font-medium">Video chấm công</span>
+            <div className="flex items-center gap-2">
+              <a href={lightboxVideo} download target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+                onClick={e => e.stopPropagation()}>
+                <Save size={13} />Tải xuống
+              </a>
+              <button onClick={() => setLightboxVideo(null)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <X size={16} className="text-white" />
+              </button>
+            </div>
+          </div>
+          <video
+            src={lightboxVideo}
+            controls
+            autoPlay
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <p className="absolute bottom-4 text-white/50 text-xs">Nhấn bên ngoài để đóng • ESC để đóng</p>
         </div>
       )}
     </div>

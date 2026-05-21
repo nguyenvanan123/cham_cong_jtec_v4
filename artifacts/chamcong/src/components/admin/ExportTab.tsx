@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Reconciliation } from "@/lib/supabase";
-import { Download, RefreshCw, FileSpreadsheet, X, Trash2, Search } from "lucide-react";
+import { Download, RefreshCw, FileSpreadsheet, X, Trash2, Search, Play } from "lucide-react";
 
 function yesterday() {
   const d = new Date(); d.setDate(d.getDate() - 1);
@@ -41,6 +41,8 @@ export function ExportTab() {
   const [modalImg, setModalImg] = useState<string | null>(null);
   const [modalImgLabel, setModalImgLabel] = useState<string>("");
   const [modalImgZoomed, setModalImgZoomed] = useState(false);
+  const [modalVideo, setModalVideo] = useState<string | null>(null);
+  const [modalVideoLabel, setModalVideoLabel] = useState<string>("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [hoursFilter, setHoursFilter] = useState<HoursFilter>("all");
   const [showNotes, setShowNotes] = useState(false);
@@ -63,7 +65,7 @@ export function ExportTab() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setModalImg(null); setModalImgZoomed(false); }
+      if (e.key === "Escape") { setModalImg(null); setModalImgZoomed(false); setModalVideo(null); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -305,15 +307,25 @@ export function ExportTab() {
                         </td>
                       )}
                       <td className="px-3 py-3">
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
                           {r.check_in_image && (
-                            <button onClick={() => { setModalImg(r.check_in_image); setModalImgLabel(`Check-in — ${r.full_name} (${r.work_date})`); setModalImgZoomed(false); }} className="w-7 h-7 rounded-lg overflow-hidden border border-green-200 hover:ring-2 hover:ring-green-400 transition">
+                            <button title="Ảnh check-in" onClick={() => { setModalImg(r.check_in_image); setModalImgLabel(`Ảnh Check-in — ${r.full_name} (${r.work_date})`); setModalImgZoomed(false); }} className="w-7 h-7 rounded-lg overflow-hidden border border-green-200 hover:ring-2 hover:ring-green-400 transition">
                               <img src={r.check_in_image} className="w-full h-full object-cover" />
                             </button>
                           )}
                           {r.check_out_image && (
-                            <button onClick={() => { setModalImg(r.check_out_image); setModalImgLabel(`Check-out — ${r.full_name} (${r.work_date})`); setModalImgZoomed(false); }} className="w-7 h-7 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-400 transition">
+                            <button title="Ảnh check-out" onClick={() => { setModalImg(r.check_out_image); setModalImgLabel(`Ảnh Check-out — ${r.full_name} (${r.work_date})`); setModalImgZoomed(false); }} className="w-7 h-7 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-400 transition">
                               <img src={r.check_out_image} className="w-full h-full object-cover" />
+                            </button>
+                          )}
+                          {r.check_in_video && (
+                            <button title="Video check-in" onClick={() => { setModalVideo(r.check_in_video!); setModalVideoLabel(`Video Check-in — ${r.full_name} (${r.work_date})`); }} className="w-7 h-7 rounded-lg border border-green-300 bg-green-50 hover:ring-2 hover:ring-green-400 transition flex items-center justify-center">
+                              <Play size={12} className="text-green-700 ml-0.5" />
+                            </button>
+                          )}
+                          {r.check_out_video && (
+                            <button title="Video check-out" onClick={() => { setModalVideo(r.check_out_video!); setModalVideoLabel(`Video Check-out — ${r.full_name} (${r.work_date})`); }} className="w-7 h-7 rounded-lg border border-blue-300 bg-blue-50 hover:ring-2 hover:ring-blue-400 transition flex items-center justify-center">
+                              <Play size={12} className="text-blue-700 ml-0.5" />
                             </button>
                           )}
                         </div>
@@ -381,6 +393,32 @@ export function ExportTab() {
             />
           </div>
           <p className="absolute bottom-4 text-white/50 text-xs">Nhấn ảnh để phóng to • ESC để đóng</p>
+        </div>
+      )}
+
+      {modalVideo && (
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center" onClick={() => setModalVideo(null)}>
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10" onClick={e => e.stopPropagation()}>
+            <span className="text-white text-sm font-medium truncate">{modalVideoLabel}</span>
+            <div className="flex items-center gap-2">
+              <a href={modalVideo} download target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
+                onClick={e => e.stopPropagation()}>
+                <Download size={13} />Tải xuống
+              </a>
+              <button onClick={() => setModalVideo(null)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
+                <X size={16} className="text-white" />
+              </button>
+            </div>
+          </div>
+          <video
+            src={modalVideo}
+            controls
+            autoPlay
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <p className="absolute bottom-4 text-white/50 text-xs">Nhấn bên ngoài để đóng • ESC để đóng</p>
         </div>
       )}
     </div>
