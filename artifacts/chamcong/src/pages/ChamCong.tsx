@@ -374,13 +374,13 @@ export default function ChamCong() {
   const handleCheckInVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 200MB.");
+    if (file.size > 50 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 50MB (khoảng 1–2 phút).");
       e.target.value = "";
       return;
     }
     e.target.value = "";
-    setCompressingMsg("Đang nén video check-in...");
+    setCompressingMsg("Đang xử lý video check-in (có thể mất 30–60 giây)...");
     setCompressing(true);
     const compressed = await compressVideo(file);
     setCompressing(false);
@@ -392,13 +392,13 @@ export default function ChamCong() {
   const handleCheckOutVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 200MB.");
+    if (file.size > 50 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 50MB (khoảng 1–2 phút).");
       e.target.value = "";
       return;
     }
     e.target.value = "";
-    setCompressingMsg("Đang nén video check-out...");
+    setCompressingMsg("Đang xử lý video check-out (có thể mất 30–60 giây)...");
     setCompressing(true);
     const compressed = await compressVideo(file);
     setCompressing(false);
