@@ -77,6 +77,7 @@ ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_in_image TEXT DEFAULT
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_image TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_in_video TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_video TEXT DEFAULT '';
+ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS employee_type CHAR(1) DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
 
@@ -84,6 +85,7 @@ ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
 ALTER TABLE reconciliations DISABLE ROW LEVEL SECURITY;`;
 
 const EMP_TYPE_KEY = (id: string) => `jtec_emp_type_${id}`;
+const START_DATE_KEY = (id: string) => `jtec_start_date_${id}`;
 
 export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord[] }) {
   const [date, setDate] = useState(todayLocal());
@@ -102,6 +104,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [bankAccount, setBankAccount] = useState("");
   const [bankName, setBankName] = useState("");
   const [employeeType, setEmployeeType] = useState<"N" | "O" | "">("");
+  const [startDate, setStartDate] = useState("");
+  const [startDates, setStartDates] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
@@ -129,16 +133,20 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     // Load trạng thái đã đối soát + employee_type từ DB
     supabase
       .from("reconciliations")
-      .select("employee_id, employee_type")
+      .select("employee_id, employee_type, start_date")
       .eq("work_date", date)
       .then(({ data }) => {
         setSavedIds((data || []).map((r: { employee_id: string }) => r.employee_id));
         const typeMap: Record<string, string> = {};
-        for (const r of (data || []) as { employee_id: string; employee_type?: string }[]) {
+        const sdMap: Record<string, string> = {};
+        for (const r of (data || []) as { employee_id: string; employee_type?: string; start_date?: string }[]) {
           const t = r.employee_type || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
           if (t) typeMap[r.employee_id] = t;
+          const sd = r.start_date || localStorage.getItem(START_DATE_KEY(r.employee_id)) || "";
+          if (sd) sdMap[r.employee_id] = sd;
         }
         setEmpTypes(typeMap);
+        setStartDates(sdMap);
       });
   }, [date, allRecords]);
 
@@ -155,12 +163,14 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setBankAccount("");
     setBankName("");
     setNotes("");
-    // Load loại NV từ localStorage trước (nhanh)
+    // Load loại NV và ngày vào làm từ localStorage trước (nhanh)
     const storedType = localStorage.getItem(EMP_TYPE_KEY(g.employee_id));
     setEmployeeType((storedType as "N" | "O") || "");
+    const storedStartDate = localStorage.getItem(START_DATE_KEY(g.employee_id));
+    setStartDate(storedStartDate || "");
     // Nếu đã đối soát trước đó, load lại toàn bộ dữ liệu đã xác nhận
     const { data } = await supabase.from("reconciliations")
-      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, notes")
+      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, notes")
       .eq("employee_id", g.employee_id)
       .eq("work_date", g.work_date)
       .limit(1);
@@ -168,16 +178,15 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       const saved = data[0] as {
         check_in_time: string; check_out_time: string;
         shift_name: string; bank_account: string; bank_name: string;
-        employee_type?: string; notes?: string;
+        employee_type?: string; start_date?: string; notes?: string;
       };
       if (saved.check_in_time) setInTime(saved.check_in_time);
       if (saved.check_out_time) setOutTime(saved.check_out_time);
       if (saved.bank_account) setBankAccount(saved.bank_account);
       if (saved.bank_name) setBankName(saved.bank_name);
       setNotes(saved.notes || "");
-      // employee_type từ DB ưu tiên hơn localStorage
       if (saved.employee_type) setEmployeeType(saved.employee_type as "N" | "O");
-      // Khớp lại shift từ tên đã lưu
+      if (saved.start_date) setStartDate(saved.start_date);
       if (saved.shift_name) {
         const prevShift = shifts.find(s =>
           saved.shift_name.toLowerCase().includes(s.name.toLowerCase()) ||
@@ -185,6 +194,17 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
         );
         if (prevShift) setShiftId(prevShift.id);
       }
+    }
+    // Nếu chưa có trong bản ghi hôm nay, tìm start_date từ bất kỳ ngày nào trước đó
+    if (!data?.[0]?.start_date && !storedStartDate) {
+      const { data: anyRec } = await supabase.from("reconciliations")
+        .select("start_date")
+        .eq("employee_id", g.employee_id)
+        .not("start_date", "is", null)
+        .neq("start_date", "")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (anyRec?.[0]?.start_date) setStartDate(anyRec[0].start_date);
     }
   };
 
@@ -205,10 +225,14 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setSaving(true);
     setSaveErrMsg(null);
 
-    // Lưu loại NV vào localStorage ngay lập tức (không cần DB)
+    // Lưu loại NV và ngày vào làm vào localStorage ngay lập tức
     if (employeeType) {
       localStorage.setItem(EMP_TYPE_KEY(selected.employee_id), employeeType);
       setEmpTypes(prev => ({ ...prev, [selected.employee_id]: employeeType }));
+    }
+    if (startDate) {
+      localStorage.setItem(START_DATE_KEY(selected.employee_id), startDate);
+      setStartDates(prev => ({ ...prev, [selected.employee_id]: startDate }));
     }
 
     const baseRec: Omit<Reconciliation, "id" | "created_at" | "employee_type"> = {
@@ -232,6 +256,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       check_out_image: selected.checkOut?.image_url ?? "",
       check_in_video: selected.checkIn?.video_url ?? "",
       check_out_video: selected.checkOut?.video_url ?? "",
+      start_date: startDate,
       notes: notes,
     };
 
@@ -300,7 +325,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
             <table className="w-full min-w-[750px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  {["Trạng thái", "Loại", "Mã NV", "Họ tên", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
+                  {["Trạng thái", "Loại", "Mã NV", "Họ tên", "Ngày vào làm", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -340,6 +365,11 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                       </td>
                       <td className="px-4 py-3 font-mono text-xs font-bold">{g.employee_id}</td>
                       <td className="px-4 py-3 font-medium">{g.full_name}</td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {startDates[g.employee_id]
+                          ? <span className="text-violet-700 font-medium">{startDates[g.employee_id]}</span>
+                          : <span className="text-muted-foreground/40">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
                       <td className="px-4 py-3 text-xs">{g.checkIn ? <span className="text-green-600 font-medium">{toHHMM(g.checkIn.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-4 py-3 text-xs">{g.checkOut ? <span className="text-blue-600 font-medium">{toHHMM(g.checkOut.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
@@ -477,6 +507,22 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                   )}
                 </div>
               )}
+
+              {/* Ngày vào làm */}
+              <div>
+                <label className="text-xs font-semibold text-foreground mb-1.5 block">📅 Ngày vào làm (ngày đầu tiên làm tại công ty)</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                {startDate && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <CheckCircle size={11} />Đã nhớ — tự động điền lần sau
+                  </p>
+                )}
+              </div>
 
               {/* Loại nhân viên */}
               <div>

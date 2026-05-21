@@ -61,6 +61,7 @@ export type Reconciliation = {
   check_out_image: string;
   check_in_video?: string;
   check_out_video?: string;
+  start_date?: string;
   employee_type?: string;
   notes?: string;
   created_at: string;

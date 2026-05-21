@@ -84,7 +84,7 @@ export function ExportTab() {
     };
     const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const headers = [
-      "Loại NV", "Ngày", "Mã NV", "Họ tên", "Ca làm",
+      "Loại NV", "Ngày vào làm", "Ngày", "Mã NV", "Họ tên", "Ca làm",
       "Giờ vào", "Giờ ra", "Tổng giờ", "Giờ thường", "Tăng ca",
       "Lương cơ bản", "Lương tăng ca", "Thưởng", "Chuyên cần", "Tổng lương",
       "Số TK", "Tên NH",
@@ -94,7 +94,7 @@ export function ExportTab() {
     const dataRows = filtered.map(r => {
       const cas = getRowCase(r);
       const cells = [
-        r.employee_type || "", r.work_date, r.employee_id, r.full_name, r.shift_name,
+        r.employee_type || "", r.start_date || "", r.work_date, r.employee_id, r.full_name, r.shift_name,
         r.check_in_time, r.check_out_time,
         r.total_hours.toFixed(2), r.normal_hours.toFixed(2), r.overtime_hours.toFixed(2),
         r.base_wage, r.overtime_pay, r.bonus, r.attendance_bonus, r.total_wage,
@@ -259,7 +259,7 @@ export function ExportTab() {
             <table className="w-full min-w-[1300px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  {["L.NV","Ngày","Mã NV","Họ tên","Ca","Vào","Ra","T.Giờ","Thường","TC","Lương CB","Lương TC","Thưởng","Tổng lương","STK","NH",...(showNotes ? ["Ghi chú"] : []),"Ảnh",""].map(h => (
+                  {["L.NV","Ngày vào làm","Ngày","Mã NV","Họ tên","Ca","Vào","Ra","T.Giờ","Thường","TC","Lương CB","Lương TC","Thưởng","Tổng lương","STK","NH",...(showNotes ? ["Ghi chú"] : []),"Ảnh",""].map(h => (
                     <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -279,6 +279,11 @@ export function ExportTab() {
                         {(!r.employee_type) && (
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground/50 text-xs">—</span>
                         )}
+                      </td>
+                      <td className="px-3 py-3 text-xs whitespace-nowrap">
+                        {r.start_date
+                          ? <span className="text-violet-700 font-medium">{r.start_date}</span>
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{r.work_date}</td>
                       <td className="px-3 py-3 font-mono text-xs font-bold">{r.employee_id}</td>
