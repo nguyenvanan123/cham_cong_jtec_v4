@@ -16,12 +16,12 @@ function getCompressOptions() {
   const conn = (navigator as unknown as { connection?: { effectiveType?: string; downlink?: number } }).connection;
   const effectiveType = conn?.effectiveType;
   if (effectiveType === "slow-2g" || effectiveType === "2g") {
-    return { maxSizeMB: 0.15, maxWidthOrHeight: 800, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.65 };
+    return { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.80 };
   }
   if (effectiveType === "3g") {
-    return { maxSizeMB: 0.2, maxWidthOrHeight: 1024, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.75 };
+    return { maxSizeMB: 1.0, maxWidthOrHeight: 1600, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.88 };
   }
-  return { maxSizeMB: 0.3, maxWidthOrHeight: 1280, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.85 };
+  return { maxSizeMB: 2.0, maxWidthOrHeight: 1920, useWebWorker: true, fileType: "image/jpeg" as const, initialQuality: 0.93 };
 }
 
 async function retryUpload<T>(
@@ -63,7 +63,7 @@ async function compressVideo(file: File): Promise<Blob> {
 
     video.onloadedmetadata = () => {
       try {
-        const maxDim = 720;
+        const maxDim = 1080;
         const vw = video.videoWidth || maxDim;
         const vh = video.videoHeight || maxDim;
         const scale = Math.min(1, maxDim / Math.max(vw, vh));
@@ -74,7 +74,7 @@ async function compressVideo(file: File): Promise<Blob> {
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext("2d")!;
-        const stream = canvas.captureStream(24);
+        const stream = canvas.captureStream(30);
 
         const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
           ? "video/webm;codecs=vp9"
@@ -82,7 +82,7 @@ async function compressVideo(file: File): Promise<Blob> {
           ? "video/webm;codecs=vp8"
           : "video/webm";
 
-        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 800_000 });
+        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 });
         const chunks: BlobPart[] = [];
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 

@@ -8,11 +8,11 @@ import {
 } from "lucide-react";
 
 const CCCD_COMPRESS_OPTIONS = {
-  maxSizeMB: 0.5,
-  maxWidthOrHeight: 1600,
+  maxSizeMB: 3.0,
+  maxWidthOrHeight: 2560,
   useWebWorker: true,
   fileType: "image/jpeg",
-  initialQuality: 0.85,
+  initialQuality: 0.93,
 };
 
 const SQL_FIX = `-- Chạy trong Supabase SQL Editor để sửa lỗi upload/lưu đơn:
