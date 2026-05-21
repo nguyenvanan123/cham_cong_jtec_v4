@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Config, Shift } from "@/lib/supabase";
@@ -7,8 +7,10 @@ import {
   Camera, Send, CheckCircle, XCircle, AlertCircle,
   Search, Megaphone, X as XIcon,
   Upload, ImagePlus, Loader2, CheckCheck, Phone,
-  Video, Play
+  Video, Play, Clock, CalendarCheck, UserCheck
 } from "lucide-react";
+
+const STORAGE_KEY = "chamcong_last_employee";
 
 
 const COMPRESS_OPTIONS = {
@@ -103,10 +105,21 @@ function today() {
 
 type UploadStep = 1 | 2 | "done";
 
+type TodayStatus = {
+  loading: boolean;
+  hasCheckIn: boolean;
+  hasCheckOut: boolean;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  shift: string | null;
+} | null;
+
 export default function ChamCong() {
   const [employeeId, setEmployeeId] = useState("");
   const [fullName, setFullName] = useState("");
   const [workDate, setWorkDate] = useState(today());
+  const [todayStatus, setTodayStatus] = useState<TodayStatus>(null);
+  const statusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shift, setShift] = useState("");
   const [dbShifts, setDbShifts] = useState<Shift[]>([]);
 
@@ -145,6 +158,62 @@ export default function ChamCong() {
   const [zaloAdminLink, setZaloAdminLink] = useState("");
   const [attendanceOpenTime, setAttendanceOpenTime] = useState("");
   const [attendanceCloseTime, setAttendanceCloseTime] = useState("");
+
+  // Khôi phục thông tin nhân viên từ lần trước
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const { id, name } = JSON.parse(saved);
+        if (id) setEmployeeId(id);
+        if (name) setFullName(name);
+      }
+    } catch {
+    }
+  }, []);
+
+  // Lưu thông tin nhân viên khi thay đổi
+  useEffect(() => {
+    if (!employeeId && !fullName) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: employeeId, name: fullName }));
+    } catch {
+    }
+  }, [employeeId, fullName]);
+
+  // Tra cứu trạng thái hôm nay theo Mã NV (debounce 600ms)
+  useEffect(() => {
+    if (statusDebounceRef.current) clearTimeout(statusDebounceRef.current);
+    const trimmed = employeeId.trim();
+    if (!trimmed) {
+      setTodayStatus(null);
+      return;
+    }
+    setTodayStatus({ loading: true, hasCheckIn: false, hasCheckOut: false, checkInTime: null, checkOutTime: null, shift: null });
+    statusDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("attendance")
+        .select("action_type,created_at,shift")
+        .eq("employee_id", trimmed)
+        .eq("work_date", today())
+        .order("created_at");
+      const records = (data || []) as { action_type: string; created_at: string; shift: string }[];
+      const ci = records.find((r) => r.action_type === "check-in");
+      const co = records.find((r) => r.action_type === "check-out");
+      const fmt = (iso: string) => {
+        const d = new Date(iso);
+        return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+      };
+      setTodayStatus({
+        loading: false,
+        hasCheckIn: !!ci,
+        hasCheckOut: !!co,
+        checkInTime: ci ? fmt(ci.created_at) : null,
+        checkOutTime: co ? fmt(co.created_at) : null,
+        shift: ci?.shift ?? co?.shift ?? null,
+      });
+    }, 600);
+  }, [employeeId]);
 
   useEffect(() => {
     supabase
@@ -422,6 +491,16 @@ export default function ChamCong() {
       showToast("success", "Chấm công thành công! Check-in & Check-out đã được lưu.");
       resetPhotos();
 
+      // Cập nhật trạng thái hôm nay sau khi submit thành công
+      setTodayStatus((prev) => ({
+        loading: false,
+        hasCheckIn: true,
+        hasCheckOut: true,
+        checkInTime: prev?.checkInTime ?? new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+        checkOutTime: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+        shift: shift,
+      }));
+
       // Kích hoạt cooldown 5 giây chống spam sau khi submit thành công
       setSubmitCooldown(true);
       setTimeout(() => setSubmitCooldown(false), 5000);
@@ -575,6 +654,55 @@ export default function ChamCong() {
               </select>
             </div>
           </div>
+
+          {todayStatus && (
+            <div className={`rounded-2xl border px-4 py-3.5 ${
+              todayStatus.loading
+                ? "bg-muted/50 border-border"
+                : todayStatus.hasCheckIn && todayStatus.hasCheckOut
+                ? "bg-green-50 border-green-200"
+                : todayStatus.hasCheckIn
+                ? "bg-amber-50 border-amber-200"
+                : "bg-blue-50 border-blue-200"
+            }`}>
+              {todayStatus.loading ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Đang kiểm tra trạng thái hôm nay...</span>
+                </div>
+              ) : todayStatus.hasCheckIn && todayStatus.hasCheckOut ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-green-700 font-semibold text-sm">
+                    <CalendarCheck size={16} />
+                    <span>Đã chấm công đầy đủ hôm nay</span>
+                  </div>
+                  {todayStatus.shift && (
+                    <p className="text-xs text-green-600 pl-6">Ca: {todayStatus.shift}</p>
+                  )}
+                  <div className="flex gap-4 pl-6 text-xs text-green-600">
+                    <span className="flex items-center gap-1"><Clock size={11} /> Check-in: {todayStatus.checkInTime}</span>
+                    <span className="flex items-center gap-1"><Clock size={11} /> Check-out: {todayStatus.checkOutTime}</span>
+                  </div>
+                </div>
+              ) : todayStatus.hasCheckIn ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-amber-700 font-semibold text-sm">
+                    <UserCheck size={16} />
+                    <span>Đã check-in, chưa check-out</span>
+                  </div>
+                  <div className="pl-6 text-xs text-amber-600 flex items-center gap-1">
+                    <Clock size={11} /> Check-in: {todayStatus.checkInTime}
+                  </div>
+                  <p className="pl-6 text-xs text-amber-600">Bạn cần gửi thêm ảnh/video check-out để hoàn tất.</p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-blue-700 text-sm">
+                  <Clock size={14} />
+                  <span>Chưa chấm công hôm nay — hãy điền đầy đủ và gửi.</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl shadow-sm border border-border p-5 space-y-4">
             <h2 className="font-semibold text-foreground text-base">Ảnh / Video chấm công</h2>
