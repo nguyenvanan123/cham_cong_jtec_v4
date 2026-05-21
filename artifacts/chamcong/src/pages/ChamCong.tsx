@@ -163,6 +163,7 @@ export default function ChamCong() {
 
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Cooldown 5 giây để chống spam form
   const [submitCooldown, setSubmitCooldown] = useState(false);
@@ -466,32 +467,48 @@ export default function ChamCong() {
 
     const uploadPhoto = async (blob: Blob, actionType: "check-in" | "check-out") => {
       const fileName = `${eid}_${workDate}_${actionType}_${ts}.jpg`;
+      setUploadPercent(0);
       return retryUpload(
         async () => {
           const { error } = await supabase.storage
             .from("checkin_photos")
-            .upload(fileName, blob, { contentType: "image/jpeg" });
+            .upload(fileName, blob, {
+              contentType: "image/jpeg",
+              // @ts-expect-error supabase-js v2 storage supports onUploadProgress
+              onUploadProgress: (ev: { loaded: number; total: number }) => {
+                setUploadPercent(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
+              },
+            });
           if (error) throw new Error(`Lỗi upload ảnh ${actionType}: ` + error.message);
+          setUploadPercent(100);
           return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
         },
         3,
-        (attempt) => setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`)
+        (attempt) => { setUploadPercent(0); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
       );
     };
 
     const uploadVideo = async (blob: Blob, actionType: "check-in" | "check-out") => {
       const ext = blob.type.split("/")[1]?.split(";")[0] || "mp4";
       const fileName = `${eid}_${workDate}_${actionType}_${ts}_video.${ext}`;
+      setUploadPercent(0);
       return retryUpload(
         async () => {
           const { error } = await supabase.storage
             .from("checkin_photos")
-            .upload(fileName, blob, { contentType: blob.type });
+            .upload(fileName, blob, {
+              contentType: blob.type,
+              // @ts-expect-error supabase-js v2 storage supports onUploadProgress
+              onUploadProgress: (ev: { loaded: number; total: number }) => {
+                setUploadPercent(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
+              },
+            });
           if (error) throw new Error(`Lỗi upload video ${actionType}: ` + error.message);
+          setUploadPercent(100);
           return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
         },
         3,
-        (attempt) => setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`)
+        (attempt) => { setUploadPercent(0); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
       );
     };
 
@@ -588,6 +605,7 @@ export default function ChamCong() {
     } finally {
       setSubmitting(false);
       setUploadProgress(null);
+      setUploadPercent(null);
     }
   };
 
@@ -835,9 +853,17 @@ export default function ChamCong() {
               <>
                 <span className="flex items-center gap-2">
                   <Loader2 size={18} className="animate-spin" />
-                  Đang gửi...
+                  {uploadPercent !== null ? `Đang upload... ${uploadPercent}%` : "Đang gửi..."}
                 </span>
-                {uploadProgress && (
+                {uploadPercent !== null && (
+                  <div className="w-full max-w-xs h-1.5 bg-white/30 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-white rounded-full transition-all duration-200"
+                      style={{ width: `${uploadPercent}%` }}
+                    />
+                  </div>
+                )}
+                {uploadProgress && uploadPercent === null && (
                   <span className="text-xs font-normal opacity-80">{uploadProgress}</span>
                 )}
               </>
