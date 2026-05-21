@@ -11,7 +11,8 @@ import {
   TrendingUp, Clock, CheckCheck,
   UserPlus, Megaphone, ToggleLeft, ToggleRight,
   ExternalLink, Image as ImageIcon,
-  Layers, CalendarCheck, FileSpreadsheet, Timer, MessageCircle
+  Layers, CalendarCheck, FileSpreadsheet, Timer, MessageCircle,
+  Video, Play
 } from "lucide-react";
 import { ShiftsTab } from "@/components/admin/ShiftsTab";
 import { ReconciliationTab } from "@/components/admin/ReconciliationTab";
@@ -245,6 +246,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   const [filterShift, setFilterShift] = useState("");
   const [dbShifts, setDbShifts] = useState<Shift[]>([]);
   const [modalImage, setModalImage] = useState<string | null>(null);
+  const [modalVideo, setModalVideo] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -366,7 +368,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Ngày</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Ca</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">TG gửi</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Ảnh</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Media</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide w-12"></th>
                   </tr>
                 </thead>
@@ -378,6 +380,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                     const inRec = g.records.find(r => r.action_type === "check-in");
                     const outRec = g.records.find(r => r.action_type === "check-out");
                     const images = g.records.filter(r => r.image_url).map(r => ({ url: r.image_url!, type: r.action_type }));
+                    const videos = g.records.filter(r => r.video_url).map(r => ({ url: r.video_url!, type: r.action_type }));
                     const key = `${g.employee_id}__${g.work_date}`;
                     const isDeleting = deletingKey === key;
                     return (
@@ -402,7 +405,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                           ) : <span>—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             {images.map((img, i) => (
                               <button key={i} onClick={() => setModalImage(img.url)}
                                 className="relative w-8 h-8 rounded-lg overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition group">
@@ -410,6 +413,13 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                                   <Search size={10} className="text-white" />
                                 </div>
+                              </button>
+                            ))}
+                            {videos.map((vid, i) => (
+                              <button key={`v${i}`} onClick={() => setModalVideo(vid.url)}
+                                title={`Video ${vid.type}`}
+                                className="w-8 h-8 rounded-lg border border-violet-300 bg-violet-50 hover:ring-2 hover:ring-violet-400/40 transition flex items-center justify-center">
+                                <Play size={13} className="text-violet-600" />
                               </button>
                             ))}
                           </div>
@@ -448,6 +458,18 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
               <X size={16} />
             </button>
             <img src={modalImage} alt="Ảnh chấm công" className="w-full rounded-2xl shadow-2xl" />
+          </div>
+        </div>
+      )}
+
+      {/* Video Modal */}
+      {modalVideo && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={() => setModalVideo(null)}>
+          <div className="relative max-w-lg w-full" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setModalVideo(null)} className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-50 transition z-10">
+              <X size={16} />
+            </button>
+            <video src={modalVideo} controls autoPlay className="w-full rounded-2xl shadow-2xl bg-black" />
           </div>
         </div>
       )}

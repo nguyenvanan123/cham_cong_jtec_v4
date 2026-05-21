@@ -6,7 +6,8 @@ import { Link } from "wouter";
 import {
   Camera, Send, CheckCircle, XCircle, AlertCircle,
   Search, Megaphone, X as XIcon,
-  Upload, ImagePlus, Loader2, CheckCheck, Phone
+  Upload, ImagePlus, Loader2, CheckCheck, Phone,
+  Video, Play
 } from "lucide-react";
 
 
@@ -35,6 +36,11 @@ export default function ChamCong() {
   const [checkOutBlob, setCheckOutBlob] = useState<Blob | null>(null);
   const [checkInPreview, setCheckInPreview] = useState<string | null>(null);
   const [checkOutPreview, setCheckOutPreview] = useState<string | null>(null);
+  const [checkInVideoBlob, setCheckInVideoBlob] = useState<Blob | null>(null);
+  const [checkOutVideoBlob, setCheckOutVideoBlob] = useState<Blob | null>(null);
+  const [checkInVideoPreview, setCheckInVideoPreview] = useState<string | null>(null);
+  const [checkOutVideoPreview, setCheckOutVideoPreview] = useState<string | null>(null);
+  const [uploadMediaTab, setUploadMediaTab] = useState<"photo" | "video">("photo");
 
   const [uploadPopupOpen, setUploadPopupOpen] = useState(false);
   const [uploadStep, setUploadStep] = useState<UploadStep>(1);
@@ -139,6 +145,7 @@ export default function ChamCong() {
 
   const openUploadPopup = () => {
     setUploadStep(1);
+    setUploadMediaTab("photo");
     setUploadPopupOpen(true);
   };
 
@@ -177,6 +184,35 @@ export default function ChamCong() {
     }
   };
 
+  const handleCheckInVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
+      e.target.value = "";
+      return;
+    }
+    setCheckInVideoBlob(file);
+    setCheckInVideoPreview(URL.createObjectURL(file));
+    setUploadStep(2);
+    e.target.value = "";
+  };
+
+  const handleCheckOutVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
+      e.target.value = "";
+      return;
+    }
+    setCheckOutVideoBlob(file);
+    setCheckOutVideoPreview(URL.createObjectURL(file));
+    setUploadStep("done");
+    setTimeout(() => setUploadPopupOpen(false), 800);
+    e.target.value = "";
+  };
+
   const resetPhotos = () => {
     setCheckInBlob(null);
     setCheckOutBlob(null);
@@ -184,6 +220,12 @@ export default function ChamCong() {
     if (checkOutPreview) URL.revokeObjectURL(checkOutPreview);
     setCheckInPreview(null);
     setCheckOutPreview(null);
+    setCheckInVideoBlob(null);
+    setCheckOutVideoBlob(null);
+    if (checkInVideoPreview) URL.revokeObjectURL(checkInVideoPreview);
+    if (checkOutVideoPreview) URL.revokeObjectURL(checkOutVideoPreview);
+    setCheckInVideoPreview(null);
+    setCheckOutVideoPreview(null);
     setUploadStep(1);
   };
 
@@ -195,8 +237,12 @@ export default function ChamCong() {
       showToast("error", "Vui lòng nhập đầy đủ Mã NV và Tên.");
       return;
     }
-    if (!checkInBlob || !checkOutBlob) {
-      showToast("error", "Vui lòng upload đủ 2 ảnh check-in và check-out.");
+    if (!checkInBlob && !checkInVideoBlob) {
+      showToast("error", "Vui lòng upload ảnh hoặc video check-in.");
+      return;
+    }
+    if (!checkOutBlob && !checkOutVideoBlob) {
+      showToast("error", "Vui lòng upload ảnh hoặc video check-out.");
       return;
     }
 
@@ -230,12 +276,23 @@ export default function ChamCong() {
       return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
     };
 
+    const uploadVideo = async (blob: Blob, actionType: "check-in" | "check-out") => {
+      const ext = blob.type.split("/")[1]?.split(";")[0] || "mp4";
+      const fileName = `${eid}_${workDate}_${actionType}_${ts}_video.${ext}`;
+      const { error } = await supabase.storage
+        .from("checkin_photos")
+        .upload(fileName, blob, { contentType: blob.type });
+      if (error) throw new Error(`Lỗi upload video ${actionType}: ` + error.message);
+      return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+    };
+
     try {
       const inserts: Promise<void>[] = [];
 
       // Lưu check-in nếu chưa có
       if (!hasCheckIn) {
-        const ciUrl = await uploadPhoto(checkInBlob, "check-in");
+        const ciImageUrl = checkInBlob ? await uploadPhoto(checkInBlob, "check-in") : null;
+        const ciVideoUrl = checkInVideoBlob ? await uploadVideo(checkInVideoBlob, "check-in") : null;
         inserts.push(
           Promise.resolve(
             supabase.from("attendance").insert({
@@ -244,7 +301,8 @@ export default function ChamCong() {
               work_date: workDate,
               shift,
               action_type: "check-in",
-              image_url: ciUrl,
+              image_url: ciImageUrl,
+              video_url: ciVideoUrl,
             }).then(({ error }) => {
               if (error) throw new Error("Lỗi lưu check-in: " + error.message);
             })
@@ -254,7 +312,8 @@ export default function ChamCong() {
 
       // Lưu check-out nếu chưa có
       if (!hasCheckOut) {
-        const coUrl = await uploadPhoto(checkOutBlob, "check-out");
+        const coImageUrl = checkOutBlob ? await uploadPhoto(checkOutBlob, "check-out") : null;
+        const coVideoUrl = checkOutVideoBlob ? await uploadVideo(checkOutVideoBlob, "check-out") : null;
         inserts.push(
           Promise.resolve(
             supabase.from("attendance").insert({
@@ -263,7 +322,8 @@ export default function ChamCong() {
               work_date: workDate,
               shift,
               action_type: "check-out",
-              image_url: coUrl,
+              image_url: coImageUrl,
+              video_url: coVideoUrl,
             }).then(({ error }) => {
               if (error) throw new Error("Lỗi lưu check-out: " + error.message);
             })
@@ -304,7 +364,7 @@ export default function ChamCong() {
     }
   };
 
-  const photosReady = !!checkInBlob && !!checkOutBlob;
+  const mediaReady = !!(checkInBlob || checkInVideoBlob) && !!(checkOutBlob || checkOutVideoBlob);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -430,43 +490,43 @@ export default function ChamCong() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-border p-5 space-y-4">
-            <h2 className="font-semibold text-foreground text-base">Ảnh chấm công</h2>
+            <h2 className="font-semibold text-foreground text-base">Ảnh / Video chấm công</h2>
 
-            {!photosReady ? (
+            {!mediaReady ? (
               <button
                 type="button"
                 onClick={openUploadPopup}
                 className="w-full py-10 rounded-xl border-2 border-dashed border-primary/40 text-primary flex flex-col items-center gap-2 hover:bg-accent/50 transition"
               >
                 <ImagePlus size={28} />
-                <span className="text-sm font-medium">Bấm để upload ảnh</span>
-                <span className="text-xs text-muted-foreground">Check-in &amp; Check-out (ảnh sẽ được nén tự động)</span>
+                <span className="text-sm font-medium">Bấm để upload ảnh / video</span>
+                <span className="text-xs text-muted-foreground">Check-in &amp; Check-out — ảnh hoặc video</span>
               </button>
             ) : (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground text-center">Check-in</p>
-                    <img
-                      src={checkInPreview!}
-                      alt="Check-in"
-                      className="w-full rounded-xl object-cover aspect-square border border-green-200"
-                    />
+                    {checkInPreview ? (
+                      <img src={checkInPreview} alt="Check-in" className="w-full rounded-xl object-cover aspect-square border border-green-200" />
+                    ) : checkInVideoPreview ? (
+                      <video src={checkInVideoPreview} className="w-full rounded-xl aspect-square object-cover border border-green-200" muted playsInline />
+                    ) : null}
                     <div className="flex items-center justify-center gap-1 text-green-600 text-xs">
                       <CheckCircle size={12} />
-                      <span>Đã nén</span>
+                      <span>{checkInVideoPreview && !checkInPreview ? "Video sẵn sàng" : "Đã nén"}</span>
                     </div>
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-medium text-muted-foreground text-center">Check-out</p>
-                    <img
-                      src={checkOutPreview!}
-                      alt="Check-out"
-                      className="w-full rounded-xl object-cover aspect-square border border-blue-200"
-                    />
+                    {checkOutPreview ? (
+                      <img src={checkOutPreview} alt="Check-out" className="w-full rounded-xl object-cover aspect-square border border-blue-200" />
+                    ) : checkOutVideoPreview ? (
+                      <video src={checkOutVideoPreview} className="w-full rounded-xl aspect-square object-cover border border-blue-200" muted playsInline />
+                    ) : null}
                     <div className="flex items-center justify-center gap-1 text-blue-600 text-xs">
                       <CheckCircle size={12} />
-                      <span>Đã nén</span>
+                      <span>{checkOutVideoPreview && !checkOutPreview ? "Video sẵn sàng" : "Đã nén"}</span>
                     </div>
                   </div>
                 </div>
@@ -485,7 +545,7 @@ export default function ChamCong() {
           <button
             type="submit"
             data-testid="btn-submit"
-            disabled={submitting || submitCooldown || !photosReady}
+            disabled={submitting || submitCooldown || !mediaReady}
             className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {submitting ? (
@@ -523,7 +583,7 @@ export default function ChamCong() {
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-3">
                 <Upload size={20} className="text-white" />
               </div>
-              <h3 className="text-white font-bold text-lg leading-tight">Upload ảnh chấm công</h3>
+              <h3 className="text-white font-bold text-lg leading-tight">Upload ảnh / video chấm công</h3>
               <div className="flex items-center gap-2 mt-2">
                 <div className={`h-1.5 flex-1 rounded-full ${uploadStep === 1 || uploadStep === 2 || uploadStep === "done" ? "bg-white" : "bg-white/30"}`} />
                 <div className={`h-1.5 flex-1 rounded-full ${uploadStep === 2 || uploadStep === "done" ? "bg-white" : "bg-white/30"}`} />
@@ -550,52 +610,87 @@ export default function ChamCong() {
               {!compressing && uploadStep === 1 && (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">Bước 1/2:</span> Upload ảnh check-in của bạn.
-                    Ảnh sẽ được nén tự động để tiết kiệm dung lượng.
+                    <span className="font-semibold text-foreground">Bước 1/2:</span> Upload check-in của bạn.
                   </p>
-                  <label className="block cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*,image/heic,image/heif"
-                      className="hidden"
-                      onChange={handleCheckInUpload}
-                    />
-                    <div className="w-full py-4 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 flex flex-col items-center gap-2 hover:bg-blue-100 transition">
-                      <ImagePlus size={24} />
-                      <span className="text-sm font-semibold">Upload Check-in</span>
-                      <span className="text-xs text-blue-500">JPG, PNG, HEIC, WebP… tất cả định dạng</span>
-                    </div>
-                  </label>
+                  <div className="flex rounded-xl border border-border overflow-hidden">
+                    <button type="button" onClick={() => setUploadMediaTab("photo")}
+                      className={`flex-1 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition ${uploadMediaTab === "photo" ? "bg-blue-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                      <ImagePlus size={14} /> Ảnh
+                    </button>
+                    <button type="button" onClick={() => setUploadMediaTab("video")}
+                      className={`flex-1 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition ${uploadMediaTab === "video" ? "bg-violet-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                      <Video size={14} /> Video
+                    </button>
+                  </div>
+                  {uploadMediaTab === "photo" ? (
+                    <label className="block cursor-pointer">
+                      <input type="file" accept="image/*,image/heic,image/heif" className="hidden" onChange={handleCheckInUpload} />
+                      <div className="w-full py-4 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 flex flex-col items-center gap-2 hover:bg-blue-100 transition">
+                        <ImagePlus size={24} />
+                        <span className="text-sm font-semibold">Chọn ảnh check-in</span>
+                        <span className="text-xs text-blue-500">JPG, PNG, HEIC, WebP… tất cả định dạng ảnh</span>
+                      </div>
+                    </label>
+                  ) : (
+                    <label className="block cursor-pointer">
+                      <input type="file" accept="video/*" className="hidden" onChange={handleCheckInVideoUpload} />
+                      <div className="w-full py-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 flex flex-col items-center gap-2 hover:bg-violet-100 transition">
+                        <Video size={24} />
+                        <span className="text-sm font-semibold">Chọn video check-in</span>
+                        <span className="text-xs text-violet-500">MP4, MOV, AVI, WebM… tối đa 100MB</span>
+                      </div>
+                    </label>
+                  )}
                 </div>
               )}
 
               {!compressing && uploadStep === 2 && (
                 <div className="space-y-3">
-                  {checkInPreview && (
-                    <div className="flex items-center gap-3 p-2 bg-green-50 rounded-xl border border-green-200">
-                      <img src={checkInPreview} alt="Check-in" className="w-12 h-12 rounded-lg object-cover" />
-                      <div>
-                        <p className="text-xs font-semibold text-green-700">Check-in ✓</p>
-                        <p className="text-xs text-green-600">Ảnh đã được nén</p>
+                  <div className="flex items-center gap-3 p-2 bg-green-50 rounded-xl border border-green-200">
+                    {checkInPreview ? (
+                      <img src={checkInPreview} alt="Check-in" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                    ) : checkInVideoPreview ? (
+                      <div className="w-12 h-12 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <Play size={18} className="text-violet-600" />
                       </div>
+                    ) : null}
+                    <div>
+                      <p className="text-xs font-semibold text-green-700">Check-in ✓</p>
+                      <p className="text-xs text-green-600">{checkInVideoPreview && !checkInPreview ? "Video đã sẵn sàng" : "Ảnh đã được nén"}</p>
                     </div>
-                  )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">Bước 2/2:</span> Upload ảnh check-out của bạn.
+                    <span className="font-semibold text-foreground">Bước 2/2:</span> Upload check-out của bạn.
                   </p>
-                  <label className="block cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*,image/heic,image/heif"
-                      className="hidden"
-                      onChange={handleCheckOutUpload}
-                    />
-                    <div className="w-full py-4 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50 text-indigo-700 flex flex-col items-center gap-2 hover:bg-indigo-100 transition">
-                      <ImagePlus size={24} />
-                      <span className="text-sm font-semibold">Upload Check-out</span>
-                      <span className="text-xs text-indigo-500">JPG, PNG, HEIC, WebP… tất cả định dạng</span>
-                    </div>
-                  </label>
+                  <div className="flex rounded-xl border border-border overflow-hidden">
+                    <button type="button" onClick={() => setUploadMediaTab("photo")}
+                      className={`flex-1 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition ${uploadMediaTab === "photo" ? "bg-indigo-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                      <ImagePlus size={14} /> Ảnh
+                    </button>
+                    <button type="button" onClick={() => setUploadMediaTab("video")}
+                      className={`flex-1 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition ${uploadMediaTab === "video" ? "bg-violet-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                      <Video size={14} /> Video
+                    </button>
+                  </div>
+                  {uploadMediaTab === "photo" ? (
+                    <label className="block cursor-pointer">
+                      <input type="file" accept="image/*,image/heic,image/heif" className="hidden" onChange={handleCheckOutUpload} />
+                      <div className="w-full py-4 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50 text-indigo-700 flex flex-col items-center gap-2 hover:bg-indigo-100 transition">
+                        <ImagePlus size={24} />
+                        <span className="text-sm font-semibold">Chọn ảnh check-out</span>
+                        <span className="text-xs text-indigo-500">JPG, PNG, HEIC, WebP… tất cả định dạng ảnh</span>
+                      </div>
+                    </label>
+                  ) : (
+                    <label className="block cursor-pointer">
+                      <input type="file" accept="video/*" className="hidden" onChange={handleCheckOutVideoUpload} />
+                      <div className="w-full py-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 flex flex-col items-center gap-2 hover:bg-violet-100 transition">
+                        <Video size={24} />
+                        <span className="text-sm font-semibold">Chọn video check-out</span>
+                        <span className="text-xs text-violet-500">MP4, MOV, AVI, WebM… tối đa 100MB</span>
+                      </div>
+                    </label>
+                  )}
                 </div>
               )}
             </div>

@@ -17,6 +17,7 @@ export type AttendanceRecord = {
   shift: string;
   action_type: "check-in" | "check-out";
   image_url: string | null;
+  video_url: string | null;
   created_at: string;
 };
 
