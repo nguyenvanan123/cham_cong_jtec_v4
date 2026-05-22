@@ -224,8 +224,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const shift = shifts.find(s => s.id === shiftId) ?? null;
   const hrs = calcHours(inTime, outTime);
 
-  // Shift duration: auto from hours (>=10h → 12h tier), overrideable manually
-  const autoDuration = hrs && hrs.total >= 10 ? "12h" : "8h";
+  // Shift duration: auto from hours (>=12h → 12h tier), overrideable manually
+  const autoDuration = hrs && hrs.total >= 12 ? "12h" : "8h";
   const shiftDuration = shiftDurationOverride ?? autoDuration;
 
   // Auto day type detection from work date

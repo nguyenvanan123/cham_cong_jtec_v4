@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Shift } from "@/lib/supabase";
-import { Plus, Pencil, Trash2, Save, X, RefreshCw, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, X, RefreshCw, Layers, Link2 } from "lucide-react";
 
 type ShiftForm = Omit<Shift, "id" | "created_at">;
 
@@ -51,6 +51,107 @@ ALTER TABLE shifts ADD COLUMN IF NOT EXISTS base_wage_holiday_12h NUMERIC DEFAUL
 -- Bước 3: Tắt RLS (bắt buộc để thêm/sửa/xóa được)
 ALTER TABLE shifts DISABLE ROW LEVEL SECURITY;`;
 
+// ─── Linked wage section (8h / 12h / OT with auto-calculation) ────────────────
+type WageGroupKeys = {
+  base8: keyof ShiftForm;
+  base12: keyof ShiftForm;
+  ot: keyof ShiftForm;
+};
+
+function WageGroup({
+  label,
+  color,
+  keys,
+  form,
+  setForm,
+}: {
+  label: string;
+  color: "green" | "orange" | "red";
+  keys: WageGroupKeys;
+  form: ShiftForm;
+  setForm: React.Dispatch<React.SetStateAction<ShiftForm>>;
+}) {
+  const palette = {
+    green:  { section: "bg-green-50 border-green-200",  title: "text-green-700",  hint: "text-green-600/70",  badge: "bg-green-100 text-green-700", link: "text-green-500" },
+    orange: { section: "bg-orange-50 border-orange-200", title: "text-orange-700", hint: "text-orange-600/70", badge: "bg-orange-100 text-orange-700", link: "text-orange-500" },
+    red:    { section: "bg-red-50 border-red-200",       title: "text-red-700",    hint: "text-red-600/70",    badge: "bg-red-100 text-red-700",    link: "text-red-500" },
+  }[color];
+
+  const base8  = form[keys.base8]  as number;
+  const base12 = form[keys.base12] as number;
+  const ot     = form[keys.ot]     as number;
+
+  const handle8Change = (v: number) => {
+    // 8h changes → keep OT, recalculate 12h
+    const new12 = v + 4 * ot;
+    setForm(prev => ({ ...prev, [keys.base8]: v, [keys.base12]: Math.round(new12) }));
+  };
+
+  const handle12Change = (v: number) => {
+    // 12h changes → recalculate OT = (12h - 8h) / 4
+    const newOT = base8 > 0 ? Math.max(0, (v - base8) / 4) : 0;
+    setForm(prev => ({ ...prev, [keys.base12]: v, [keys.ot]: Math.round(newOT) }));
+  };
+
+  const handleOTChange = (v: number) => {
+    // OT changes → recalculate 12h = 8h + 4 * OT
+    const new12 = base8 + 4 * v;
+    setForm(prev => ({ ...prev, [keys.ot]: v, [keys.base12]: Math.round(new12) }));
+  };
+
+  const inputCls = "w-full px-3 py-2.5 rounded-xl border border-input bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/40";
+
+  return (
+    <div className={`border rounded-xl p-3 space-y-3 ${palette.section}`}>
+      <p className={`text-xs font-bold flex items-center gap-1.5 ${palette.title}`}>
+        {label}
+      </p>
+
+      {/* Khung lương cấu hình ca */}
+      <div className={`border rounded-xl p-2.5 space-y-2 bg-white/60 border-current/10`}>
+        <p className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${palette.hint}`}>
+          <Link2 size={10} /> Khung lương ca (liên kết tự động)
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">🕗 Ca 8 tiếng (đ)</label>
+            <input
+              type="number" min={0}
+              value={base8}
+              onChange={e => handle8Change(Number(e.target.value))}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">🕛 Ca 12 tiếng (đ)</label>
+            <input
+              type="number" min={0}
+              value={base12}
+              onChange={e => handle12Change(Number(e.target.value))}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Tăng ca/giờ (đ)</label>
+            <input
+              type="number" min={0}
+              value={ot}
+              onChange={e => handleOTChange(Number(e.target.value))}
+              className={inputCls}
+            />
+            <p className={`text-[9px] mt-0.5 ${palette.hint}`}>≡ 4h tăng ca</p>
+          </div>
+        </div>
+        {base8 > 0 && ot > 0 && (
+          <p className={`text-[10px] ${palette.hint} bg-white/80 rounded-lg px-2 py-1`}>
+            Ca 12h = {base8.toLocaleString("vi-VN")} + (4 × {ot.toLocaleString("vi-VN")}) = <strong>{base12.toLocaleString("vi-VN")}đ</strong>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ShiftsTab() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +176,18 @@ export function ShiftsTab() {
   const openAdd = () => { setEditId(null); setForm({ ...EMPTY }); setSaveError(null); setModal(true); };
   const openEdit = (s: Shift) => {
     setEditId(s.id);
-    setForm({ name: s.name, start_time: s.start_time, end_time: s.end_time, base_wage: s.base_wage, overtime_wage: s.overtime_wage, bonus: s.bonus, attendance_bonus: s.attendance_bonus, base_wage_dayoff: s.base_wage_dayoff ?? 0, overtime_wage_dayoff: s.overtime_wage_dayoff ?? 0, base_wage_holiday: s.base_wage_holiday ?? 0, overtime_wage_holiday: s.overtime_wage_holiday ?? 0, base_wage_12h: s.base_wage_12h ?? 0, base_wage_dayoff_12h: s.base_wage_dayoff_12h ?? 0, base_wage_holiday_12h: s.base_wage_holiday_12h ?? 0 });
+    setForm({
+      name: s.name, start_time: s.start_time, end_time: s.end_time,
+      base_wage: s.base_wage, overtime_wage: s.overtime_wage,
+      bonus: s.bonus, attendance_bonus: s.attendance_bonus,
+      base_wage_dayoff: s.base_wage_dayoff ?? 0,
+      overtime_wage_dayoff: s.overtime_wage_dayoff ?? 0,
+      base_wage_holiday: s.base_wage_holiday ?? 0,
+      overtime_wage_holiday: s.overtime_wage_holiday ?? 0,
+      base_wage_12h: s.base_wage_12h ?? 0,
+      base_wage_dayoff_12h: s.base_wage_dayoff_12h ?? 0,
+      base_wage_holiday_12h: s.base_wage_holiday_12h ?? 0,
+    });
     setSaveError(null);
     setModal(true);
   };
@@ -164,7 +276,7 @@ export function ShiftsTab() {
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  {["Tên ca", "Giờ", "🟢 Ngày thường", "🟠 Ngày nghỉ", "🔴 Ngày lễ", "Thưởng", "Chuyên cần", ""].map(h => (
+                  {["Tên ca", "Giờ", "🟢 Ngày thường", "🟠 Ngày nghỉ", "🔴 Ngày lễ", "Thưởng & Phụ cấp", ""].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -177,20 +289,22 @@ export function ShiftsTab() {
                     <td className="px-4 py-3">
                       <div className="text-xs font-medium text-green-700">8h: {f(s.base_wage)}đ</div>
                       <div className="text-xs font-medium text-green-600">12h: {f(s.base_wage_12h ?? 0)}đ</div>
-                      <div className="text-xs text-green-600/50">+{f(s.overtime_wage)}đ/h TC</div>
+                      <div className="text-xs text-green-600/60">+{f(s.overtime_wage)}đ/h TC</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-xs font-medium text-orange-700">8h: {f(s.base_wage_dayoff ?? 0)}đ</div>
                       <div className="text-xs font-medium text-orange-600">12h: {f(s.base_wage_dayoff_12h ?? 0)}đ</div>
-                      <div className="text-xs text-orange-600/50">+{f(s.overtime_wage_dayoff ?? 0)}đ/h TC</div>
+                      <div className="text-xs text-orange-600/60">+{f(s.overtime_wage_dayoff ?? 0)}đ/h TC</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-xs font-medium text-red-700">8h: {f(s.base_wage_holiday ?? 0)}đ</div>
                       <div className="text-xs font-medium text-red-600">12h: {f(s.base_wage_holiday_12h ?? 0)}đ</div>
-                      <div className="text-xs text-red-600/50">+{f(s.overtime_wage_holiday ?? 0)}đ/h TC</div>
+                      <div className="text-xs text-red-600/60">+{f(s.overtime_wage_holiday ?? 0)}đ/h TC</div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-blue-700 font-medium">{f(s.bonus)}đ</td>
-                    <td className="px-4 py-3 text-xs text-violet-700 font-medium">{f(s.attendance_bonus)}đ</td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs text-blue-700 font-medium">🎁 {f(s.bonus)}đ</div>
+                      <div className="text-xs text-violet-700 font-medium">⭐ {f(s.attendance_bonus)}đ</div>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition">
@@ -211,12 +325,14 @@ export function ShiftsTab() {
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
               <h3 className="font-bold text-foreground">{editId ? "Sửa ca làm việc" : "Thêm ca mới"}</h3>
               <button onClick={() => setModal(false)} className="p-1.5 rounded-lg hover:bg-muted transition"><X size={16} /></button>
             </div>
-            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Tên và giờ */}
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Tên ca *</label>
                 <input
@@ -226,7 +342,7 @@ export function ShiftsTab() {
                   className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {(["start_time", "end_time"] as const).map(k => (
                   <div key={k}>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -241,53 +357,51 @@ export function ShiftsTab() {
                   </div>
                 ))}
               </div>
-              <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-3">
-                <p className="text-xs font-bold text-green-700 flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />🟢 Ngày thường
-                </p>
+
+              {/* Ngày thường */}
+              <WageGroup
+                label="🟢 Ngày thường"
+                color="green"
+                keys={{ base8: "base_wage", base12: "base_wage_12h", ot: "overtime_wage" }}
+                form={form}
+                setForm={setForm}
+              />
+
+              {/* Ngày nghỉ */}
+              <WageGroup
+                label="🟠 Ngày nghỉ (cuối tuần)"
+                color="orange"
+                keys={{ base8: "base_wage_dayoff", base12: "base_wage_dayoff_12h", ot: "overtime_wage_dayoff" }}
+                form={form}
+                setForm={setForm}
+              />
+
+              {/* Ngày lễ */}
+              <WageGroup
+                label="🔴 Ngày lễ"
+                color="red"
+                keys={{ base8: "base_wage_holiday", base12: "base_wage_holiday_12h", ot: "overtime_wage_holiday" }}
+                form={form}
+                setForm={setForm}
+              />
+
+              {/* Thưởng & Phụ cấp — tách riêng */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-3">
+                <p className="text-xs font-bold text-blue-700">💰 Thưởng &amp; Phụ cấp</p>
+                <p className="text-[10px] text-blue-500/80 -mt-1">Tính theo kỳ lương / KPI, không gắn với cấu trúc ca đơn lẻ</p>
                 <div className="grid grid-cols-2 gap-3">
-                  {numField("base_wage", "🕗 Ca 8 tiếng (đ)")}
-                  {numField("base_wage_12h", "🕛 Ca 12 tiếng (đ)")}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {numField("overtime_wage", "Tăng ca/giờ (đ)")}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {numField("bonus", "Thưởng (đ)")}
-                  {numField("attendance_bonus", "Chuyên cần (đ)")}
-                </div>
-              </div>
-              <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-3">
-                <p className="text-xs font-bold text-orange-700 flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />🟠 Ngày nghỉ (cuối tuần)
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {numField("base_wage_dayoff", "🕗 Ca 8 tiếng (đ)")}
-                  {numField("base_wage_dayoff_12h", "🕛 Ca 12 tiếng (đ)")}
-                </div>
-                <div className="grid grid-cols-1 gap-3">
-                  {numField("overtime_wage_dayoff", "Tăng ca/giờ (đ)")}
-                </div>
-              </div>
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-3">
-                <p className="text-xs font-bold text-red-700 flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />🔴 Ngày lễ
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {numField("base_wage_holiday", "🕗 Ca 8 tiếng (đ)")}
-                  {numField("base_wage_holiday_12h", "🕛 Ca 12 tiếng (đ)")}
-                </div>
-                <div className="grid grid-cols-1 gap-3">
-                  {numField("overtime_wage_holiday", "Tăng ca/giờ (đ)")}
+                  {numField("bonus", "🎁 Thưởng (đ)")}
+                  {numField("attendance_bonus", "⭐ Chuyên cần (đ)")}
                 </div>
               </div>
             </div>
+
             {saveError && (
-              <div className="mx-5 mb-1 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700 font-medium">
+              <div className="mx-5 mb-1 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700 font-medium flex-shrink-0">
                 ❌ {saveError}
               </div>
             )}
-            <div className="flex gap-3 px-5 py-4 border-t border-border">
+            <div className="flex gap-3 px-5 py-4 border-t border-border flex-shrink-0">
               <button onClick={() => setModal(false)} className="flex-1 py-2.5 border border-border rounded-xl text-sm text-muted-foreground hover:bg-muted transition">Hủy</button>
               <button
                 onClick={handleSave}
