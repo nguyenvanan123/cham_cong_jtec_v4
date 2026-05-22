@@ -187,10 +187,10 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     // Đặt giá trị mặc định từ attendance trước
     setInTime(g.checkIn ? toHHMM(g.checkIn.created_at) : "");
     setOutTime(g.checkOut ? toHHMM(g.checkOut.created_at) : "");
-    // Khớp ca: ưu tiên đúng tên ca nhân viên đã chọn, không fallback về ca đầu tiên
+    // Khớp ca: tìm ca mà tên ca nằm trong chuỗi ca nhân viên đã chọn
+    // VD: g.shift="ca 3 (22:00 - 06:00)" → khớp với s.name="ca 3"
     const matched = shifts.find(s =>
-      g.shift.toLowerCase().includes(s.name.toLowerCase()) ||
-      s.name.toLowerCase().includes(g.shift.split(" ")[0].toLowerCase())
+      g.shift.toLowerCase().includes(s.name.toLowerCase())
     );
     setShiftId(matched?.id ?? "");
     setBankAccount("");
@@ -251,8 +251,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       }
       if (saved.shift_name) {
         const prevShift = shifts.find(s =>
-          saved.shift_name.toLowerCase().includes(s.name.toLowerCase()) ||
-          s.name.toLowerCase().includes(saved.shift_name.split(" ")[0].toLowerCase())
+          saved.shift_name.toLowerCase().includes(s.name.toLowerCase())
         );
         if (prevShift) setShiftId(prevShift.id);
       }
