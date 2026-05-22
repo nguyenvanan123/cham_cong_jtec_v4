@@ -72,6 +72,7 @@ export type Reconciliation = {
   day_type?: string;
   employee_type?: string;
   notes?: string;
+  work_date_end?: string;
   created_at: string;
 };
 

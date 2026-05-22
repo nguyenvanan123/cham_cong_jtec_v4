@@ -82,6 +82,7 @@ ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS day_type TEXT DEFAULT 'normal';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS employee_type CHAR(1) DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS work_date_end DATE;
 
 -- Bước 3: Tắt RLS (bắt buộc để lưu dữ liệu đối soát)
 ALTER TABLE reconciliations DISABLE ROW LEVEL SECURITY;`;
@@ -112,6 +113,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [dayTypes, setDayTypes] = useState<Record<string, string>>({});
   const [shiftDurationOverride, setShiftDurationOverride] = useState<"8h" | "12h" | null>(null);
   const [notes, setNotes] = useState("");
+  const [workDateEnd, setWorkDateEnd] = useState("");
+  const [workDateEnds, setWorkDateEnds] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
   const [lightboxVideo, setLightboxVideo] = useState<string | null>(null);
@@ -138,23 +141,26 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     // Load trạng thái đã đối soát + employee_type từ DB
     supabase
       .from("reconciliations")
-      .select("employee_id, employee_type, start_date, day_type")
+      .select("employee_id, employee_type, start_date, day_type, work_date_end")
       .eq("work_date", date)
       .then(({ data }) => {
         setSavedIds((data || []).map((r: { employee_id: string }) => r.employee_id));
         const typeMap: Record<string, string> = {};
         const sdMap: Record<string, string> = {};
         const dtMap: Record<string, string> = {};
-        for (const r of (data || []) as { employee_id: string; employee_type?: string; start_date?: string; day_type?: string }[]) {
+        const wedMap: Record<string, string> = {};
+        for (const r of (data || []) as { employee_id: string; employee_type?: string; start_date?: string; day_type?: string; work_date_end?: string }[]) {
           const t = r.employee_type || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
           if (t) typeMap[r.employee_id] = t;
           const sd = r.start_date || localStorage.getItem(START_DATE_KEY(r.employee_id)) || "";
           if (sd) sdMap[r.employee_id] = sd;
           if (r.day_type) dtMap[r.employee_id] = r.day_type;
+          if (r.work_date_end) wedMap[r.employee_id] = r.work_date_end;
         }
         setEmpTypes(typeMap);
         setStartDates(sdMap);
         setDayTypes(dtMap);
+        setWorkDateEnds(wedMap);
       });
   }, [date, allRecords]);
 
@@ -173,6 +179,20 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setNotes("");
     setDayType(detectDayType(g.work_date));
     setShiftDurationOverride(null);
+    // Overnight shift: tự động tính ngày kết thúc
+    const isOvernightMatched = matched ? matched.end_time < matched.start_time : false;
+    if (isOvernightMatched) {
+      const defaultEnd = g.checkOut
+        ? g.checkOut.created_at.split('T')[0]
+        : (() => {
+            const d = new Date(g.work_date + 'T12:00:00');
+            d.setDate(d.getDate() + 1);
+            return d.toISOString().split('T')[0];
+          })();
+      setWorkDateEnd(defaultEnd);
+    } else {
+      setWorkDateEnd("");
+    }
     // Load loại NV và ngày vào làm từ localStorage trước (nhanh)
     const storedType = localStorage.getItem(EMP_TYPE_KEY(g.employee_id));
     setEmployeeType((storedType as "N" | "O") || "");
@@ -180,7 +200,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setStartDate(storedStartDate || "");
     // Nếu đã đối soát trước đó, load lại toàn bộ dữ liệu đã xác nhận
     const { data } = await supabase.from("reconciliations")
-      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, day_type, notes")
+      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, day_type, notes, work_date_end")
       .eq("employee_id", g.employee_id)
       .eq("work_date", g.work_date)
       .limit(1);
@@ -188,7 +208,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       const saved = data[0] as {
         check_in_time: string; check_out_time: string;
         shift_name: string; bank_account: string; bank_name: string;
-        employee_type?: string; start_date?: string; day_type?: string; notes?: string;
+        employee_type?: string; start_date?: string; day_type?: string; notes?: string; work_date_end?: string;
       };
       if (saved.check_in_time) setInTime(saved.check_in_time);
       if (saved.check_out_time) setOutTime(saved.check_out_time);
@@ -198,6 +218,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       if (saved.employee_type) setEmployeeType(saved.employee_type as "N" | "O");
       if (saved.start_date) setStartDate(saved.start_date);
       if (saved.day_type) setDayType(saved.day_type as "normal" | "dayoff" | "holiday");
+      if (saved.work_date_end) setWorkDateEnd(saved.work_date_end);
       if (saved.shift_name) {
         const prevShift = shifts.find(s =>
           saved.shift_name.toLowerCase().includes(s.name.toLowerCase()) ||
@@ -227,6 +248,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   // Shift duration: auto from hours (>=12h → 12h tier), overrideable manually
   const autoDuration = hrs && hrs.total >= 12 ? "12h" : "8h";
   const shiftDuration = shiftDurationOverride ?? autoDuration;
+  const isOvernightShift = shift ? shift.end_time < shift.start_time : false;
 
   // Auto day type detection from work date
   const autoDetectedType = selected ? detectDayType(selected.work_date) : "normal";
@@ -296,6 +318,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       start_date: startDate,
       day_type: dayType,
       notes: notes,
+      work_date_end: isOvernightShift ? workDateEnd : "",
     };
 
     // Cố gắng lưu đầy đủ (bao gồm employee_type)
@@ -445,7 +468,12 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                           <span className="text-muted-foreground/40 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        <span>{g.shift.split("(")[0].trim()}</span>
+                        {workDateEnds[g.employee_id] && (
+                          <span className="block text-indigo-600 font-medium text-[10px]">🌙 {date.slice(5)} → {workDateEnds[g.employee_id].slice(5)}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-xs">{g.checkIn ? <span className="text-green-600 font-medium">{toHHMM(g.checkIn.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-4 py-3 text-xs">{g.checkOut ? <span className="text-blue-600 font-medium">{toHHMM(g.checkOut.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
@@ -477,7 +505,11 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
             <div className="bg-gradient-to-r from-primary to-indigo-600 px-5 py-4 flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-white font-bold">{selected.full_name}</h3>
-                <p className="text-white/70 text-xs">{selected.employee_id} · {selected.work_date}</p>
+                <p className="text-white/70 text-xs">
+                  {selected.employee_id} · {isOvernightShift && workDateEnd
+                    ? `${selected.work_date} → ${workDateEnd}`
+                    : selected.work_date}
+                </p>
               </div>
               <button onClick={closePopup} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center">
                 <X size={16} className="text-white" />
@@ -531,6 +563,28 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                   </div>
                 ))}
               </div>
+
+              {isOvernightShift && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-bold text-indigo-700 flex items-center gap-1.5">
+                    🌙 Ca xuyên đêm — Ngày làm việc
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Ngày bắt đầu</label>
+                      <input type="date" value={selected.work_date} readOnly
+                        className="w-full px-3 py-2 rounded-xl border border-input bg-muted/30 text-sm text-muted-foreground cursor-not-allowed" />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Lấy từ dữ liệu chấm công</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Ngày kết thúc *</label>
+                      <input type="date" value={workDateEnd} onChange={e => setWorkDateEnd(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                      <p className="text-[10px] text-indigo-500 mt-0.5">Admin có thể chỉnh sửa</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Ca làm việc (tính lương)</label>

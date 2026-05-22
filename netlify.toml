@@ -1,19 +1,13 @@
 [build]
-  # Lệnh build: truyền PORT=3000 (chỉ dùng lúc dev, không ảnh hưởng file tĩnh)
-  # và BASE_PATH=/ để Vite biết đường dẫn gốc
-  command = "PORT=3000 BASE_PATH=/ pnpm --filter @workspace/chamcong run build"
-
-  # Thư mục chứa file tĩnh sau khi build xong
+  command = "pnpm install --frozen-lockfile && pnpm --filter @workspace/chamcong run build"
   publish = "artifacts/chamcong/dist/public"
 
-# SPA redirect: tất cả route đều trả về index.html (cần cho Wouter)
+[build.environment]
+  NODE_VERSION = "20"
+  PNPM_VERSION = "9"
+  NODE_ENV = "production"
+
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
-
-[build.environment]
-  # Phiên bản Node.js — phải >= 20
-  NODE_VERSION = "20"
-  # pnpm sẽ được cài tự động qua corepack
-  PNPM_VERSION = "9"
