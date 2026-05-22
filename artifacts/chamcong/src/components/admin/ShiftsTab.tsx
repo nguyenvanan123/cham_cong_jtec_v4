@@ -17,6 +17,9 @@ const EMPTY: ShiftForm = {
   overtime_wage_dayoff: 0,
   base_wage_holiday: 0,
   overtime_wage_holiday: 0,
+  base_wage_12h: 0,
+  base_wage_dayoff_12h: 0,
+  base_wage_holiday_12h: 0,
 };
 
 const SQL = `-- Bước 1: Tạo bảng (nếu chưa có)
@@ -41,6 +44,9 @@ ALTER TABLE shifts ADD COLUMN IF NOT EXISTS base_wage_dayoff NUMERIC DEFAULT 0;
 ALTER TABLE shifts ADD COLUMN IF NOT EXISTS overtime_wage_dayoff NUMERIC DEFAULT 0;
 ALTER TABLE shifts ADD COLUMN IF NOT EXISTS base_wage_holiday NUMERIC DEFAULT 0;
 ALTER TABLE shifts ADD COLUMN IF NOT EXISTS overtime_wage_holiday NUMERIC DEFAULT 0;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS base_wage_12h NUMERIC DEFAULT 0;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS base_wage_dayoff_12h NUMERIC DEFAULT 0;
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS base_wage_holiday_12h NUMERIC DEFAULT 0;
 
 -- Bước 3: Tắt RLS (bắt buộc để thêm/sửa/xóa được)
 ALTER TABLE shifts DISABLE ROW LEVEL SECURITY;`;
@@ -69,7 +75,7 @@ export function ShiftsTab() {
   const openAdd = () => { setEditId(null); setForm({ ...EMPTY }); setSaveError(null); setModal(true); };
   const openEdit = (s: Shift) => {
     setEditId(s.id);
-    setForm({ name: s.name, start_time: s.start_time, end_time: s.end_time, base_wage: s.base_wage, overtime_wage: s.overtime_wage, bonus: s.bonus, attendance_bonus: s.attendance_bonus, base_wage_dayoff: s.base_wage_dayoff ?? 0, overtime_wage_dayoff: s.overtime_wage_dayoff ?? 0, base_wage_holiday: s.base_wage_holiday ?? 0, overtime_wage_holiday: s.overtime_wage_holiday ?? 0 });
+    setForm({ name: s.name, start_time: s.start_time, end_time: s.end_time, base_wage: s.base_wage, overtime_wage: s.overtime_wage, bonus: s.bonus, attendance_bonus: s.attendance_bonus, base_wage_dayoff: s.base_wage_dayoff ?? 0, overtime_wage_dayoff: s.overtime_wage_dayoff ?? 0, base_wage_holiday: s.base_wage_holiday ?? 0, overtime_wage_holiday: s.overtime_wage_holiday ?? 0, base_wage_12h: s.base_wage_12h ?? 0, base_wage_dayoff_12h: s.base_wage_dayoff_12h ?? 0, base_wage_holiday_12h: s.base_wage_holiday_12h ?? 0 });
     setSaveError(null);
     setModal(true);
   };
@@ -169,16 +175,19 @@ export function ShiftsTab() {
                     <td className="px-4 py-3 font-semibold text-foreground">{s.name}</td>
                     <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{s.start_time} – {s.end_time}</td>
                     <td className="px-4 py-3">
-                      <div className="text-xs font-medium text-green-700">{f(s.base_wage)}đ</div>
-                      <div className="text-xs text-green-600/60">+{f(s.overtime_wage)}đ/h TC</div>
+                      <div className="text-xs font-medium text-green-700">8h: {f(s.base_wage)}đ</div>
+                      <div className="text-xs font-medium text-green-600">12h: {f(s.base_wage_12h ?? 0)}đ</div>
+                      <div className="text-xs text-green-600/50">+{f(s.overtime_wage)}đ/h TC</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-xs font-medium text-orange-700">{f(s.base_wage_dayoff ?? 0)}đ</div>
-                      <div className="text-xs text-orange-600/60">+{f(s.overtime_wage_dayoff ?? 0)}đ/h TC</div>
+                      <div className="text-xs font-medium text-orange-700">8h: {f(s.base_wage_dayoff ?? 0)}đ</div>
+                      <div className="text-xs font-medium text-orange-600">12h: {f(s.base_wage_dayoff_12h ?? 0)}đ</div>
+                      <div className="text-xs text-orange-600/50">+{f(s.overtime_wage_dayoff ?? 0)}đ/h TC</div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-xs font-medium text-red-700">{f(s.base_wage_holiday ?? 0)}đ</div>
-                      <div className="text-xs text-red-600/60">+{f(s.overtime_wage_holiday ?? 0)}đ/h TC</div>
+                      <div className="text-xs font-medium text-red-700">8h: {f(s.base_wage_holiday ?? 0)}đ</div>
+                      <div className="text-xs font-medium text-red-600">12h: {f(s.base_wage_holiday_12h ?? 0)}đ</div>
+                      <div className="text-xs text-red-600/50">+{f(s.overtime_wage_holiday ?? 0)}đ/h TC</div>
                     </td>
                     <td className="px-4 py-3 text-xs text-blue-700 font-medium">{f(s.bonus)}đ</td>
                     <td className="px-4 py-3 text-xs text-violet-700 font-medium">{f(s.attendance_bonus)}đ</td>
@@ -236,31 +245,40 @@ export function ShiftsTab() {
                 <p className="text-xs font-bold text-green-700 flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />🟢 Ngày thường
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {numField("base_wage", "Lương cơ bản/ca (đ)")}
-                  {numField("overtime_wage", "Lương tăng ca/giờ (đ)")}
+                <div className="grid grid-cols-2 gap-3">
+                  {numField("base_wage", "🕗 Ca 8 tiếng (đ)")}
+                  {numField("base_wage_12h", "🕛 Ca 12 tiếng (đ)")}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {numField("overtime_wage", "Tăng ca/giờ (đ)")}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   {numField("bonus", "Thưởng (đ)")}
-                  {numField("attendance_bonus", "Thưởng chuyên cần (đ)")}
+                  {numField("attendance_bonus", "Chuyên cần (đ)")}
                 </div>
               </div>
               <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-3">
                 <p className="text-xs font-bold text-orange-700 flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block" />🟠 Ngày nghỉ (cuối tuần)
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {numField("base_wage_dayoff", "Lương cơ bản/ca (đ)")}
-                  {numField("overtime_wage_dayoff", "Lương tăng ca/giờ (đ)")}
+                <div className="grid grid-cols-2 gap-3">
+                  {numField("base_wage_dayoff", "🕗 Ca 8 tiếng (đ)")}
+                  {numField("base_wage_dayoff_12h", "🕛 Ca 12 tiếng (đ)")}
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {numField("overtime_wage_dayoff", "Tăng ca/giờ (đ)")}
                 </div>
               </div>
               <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-3">
                 <p className="text-xs font-bold text-red-700 flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />🔴 Ngày lễ
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {numField("base_wage_holiday", "Lương cơ bản/ca (đ)")}
-                  {numField("overtime_wage_holiday", "Lương tăng ca/giờ (đ)")}
+                <div className="grid grid-cols-2 gap-3">
+                  {numField("base_wage_holiday", "🕗 Ca 8 tiếng (đ)")}
+                  {numField("base_wage_holiday_12h", "🕛 Ca 12 tiếng (đ)")}
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {numField("overtime_wage_holiday", "Tăng ca/giờ (đ)")}
                 </div>
               </div>
             </div>

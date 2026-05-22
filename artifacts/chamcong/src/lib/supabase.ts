@@ -40,6 +40,9 @@ export type Shift = {
   overtime_wage_dayoff: number;
   base_wage_holiday: number;
   overtime_wage_holiday: number;
+  base_wage_12h: number;
+  base_wage_dayoff_12h: number;
+  base_wage_holiday_12h: number;
   created_at: string;
 };
 

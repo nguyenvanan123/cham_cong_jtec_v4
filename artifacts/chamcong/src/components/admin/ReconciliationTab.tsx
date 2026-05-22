@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Shift, Reconciliation } from "@/lib/supabase";
+import { detectDayType, getDayOfWeekShort, getAutoReason } from "@/lib/vn-holidays";
 import { X, CheckCircle, Clock, Banknote, CalendarCheck, RefreshCw, Search, Save, AlertCircle, ZoomIn, Play } from "lucide-react";
 
 type Group = {
@@ -109,6 +110,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [startDates, setStartDates] = useState<Record<string, string>>({});
   const [dayType, setDayType] = useState<"normal" | "dayoff" | "holiday">("normal");
   const [dayTypes, setDayTypes] = useState<Record<string, string>>({});
+  const [shiftDurationOverride, setShiftDurationOverride] = useState<"8h" | "12h" | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
@@ -169,7 +171,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setBankAccount("");
     setBankName("");
     setNotes("");
-    setDayType("normal");
+    setDayType(detectDayType(g.work_date));
+    setShiftDurationOverride(null);
     // Load loại NV và ngày vào làm từ localStorage trước (nhanh)
     const storedType = localStorage.getItem(EMP_TYPE_KEY(g.employee_id));
     setEmployeeType((storedType as "N" | "O") || "");
@@ -220,10 +223,22 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
 
   const shift = shifts.find(s => s.id === shiftId) ?? null;
   const hrs = calcHours(inTime, outTime);
+
+  // Shift duration: auto from hours (>=10h → 12h tier), overrideable manually
+  const autoDuration = hrs && hrs.total >= 10 ? "12h" : "8h";
+  const shiftDuration = shiftDurationOverride ?? autoDuration;
+
+  // Auto day type detection from work date
+  const autoDetectedType = selected ? detectDayType(selected.work_date) : "normal";
+  const autoReason = selected ? getAutoReason(selected.work_date) : null;
+  const workDayOfWeek = selected ? getDayOfWeekShort(selected.work_date) : "";
+
   const effectiveBaseWage = !shift ? 0
-    : dayType === "holiday" ? (shift.base_wage_holiday || 0)
-    : dayType === "dayoff"  ? (shift.base_wage_dayoff || 0)
-    : shift.base_wage;
+    : dayType === "holiday"
+      ? (shiftDuration === "12h" ? (shift.base_wage_holiday_12h || 0) : (shift.base_wage_holiday || 0))
+    : dayType === "dayoff"
+      ? (shiftDuration === "12h" ? (shift.base_wage_dayoff_12h || 0) : (shift.base_wage_dayoff || 0))
+    : (shiftDuration === "12h" ? (shift.base_wage_12h || 0) : shift.base_wage);
   const effectiveOTWage = !shift ? 0
     : dayType === "holiday" ? (shift.overtime_wage_holiday || 0)
     : dayType === "dayoff"  ? (shift.overtime_wage_dayoff || 0)
@@ -261,7 +276,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       employee_id: selected.employee_id,
       full_name: selected.full_name,
       work_date: selected.work_date,
-      shift_name: selected.shift,
+      shift_name: shift?.name ?? selected.shift,
       check_in_time: inTime,
       check_out_time: outTime,
       total_hours: hrs?.total ?? 0,
@@ -283,18 +298,44 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       notes: notes,
     };
 
-    // Thử lưu với employee_type trước
+    // Cố gắng lưu đầy đủ (bao gồm employee_type)
     const recWithType = { ...baseRec, employee_type: employeeType };
     let { error } = await supabase.from("reconciliations").upsert(recWithType, { onConflict: "employee_id,work_date" });
 
-    // Nếu cột chưa tồn tại trong DB → thử lại không có employee_type
+    // Retry 1: cột employee_type chưa có trong DB
     if (error?.message?.includes("employee_type")) {
       ({ error } = await supabase.from("reconciliations").upsert(baseRec, { onConflict: "employee_id,work_date" }));
-      if (!error) setSaveErrMsg("⚠️ Đã lưu thành công (trừ loại NV). Chạy SQL migration để lưu cột employee_type vào DB.");
+      if (!error) setSaveErrMsg("⚠️ Lưu thành công (trừ cột employee_type). Chạy SQL migration để đầy đủ.");
+    }
+
+    // Retry 2: cột mới (day_type, start_date, notes, video) chưa có trong DB
+    if (error?.message?.includes("column") && error.message.includes("does not exist")) {
+      const coreRec = {
+        employee_id: baseRec.employee_id,
+        full_name: baseRec.full_name,
+        work_date: baseRec.work_date,
+        shift_name: baseRec.shift_name,
+        check_in_time: baseRec.check_in_time,
+        check_out_time: baseRec.check_out_time,
+        total_hours: baseRec.total_hours,
+        normal_hours: baseRec.normal_hours,
+        overtime_hours: baseRec.overtime_hours,
+        base_wage: baseRec.base_wage,
+        overtime_pay: baseRec.overtime_pay,
+        bonus: baseRec.bonus,
+        attendance_bonus: baseRec.attendance_bonus,
+        total_wage: baseRec.total_wage,
+        bank_account: baseRec.bank_account,
+        bank_name: baseRec.bank_name,
+        check_in_image: baseRec.check_in_image,
+        check_out_image: baseRec.check_out_image,
+      };
+      ({ error } = await supabase.from("reconciliations").upsert(coreRec, { onConflict: "employee_id,work_date" }));
+      if (!error) setSaveErrMsg("⚠️ Lưu thành công nhưng thiếu một số cột mới. Chạy SQL migration đầy đủ trong Supabase để lưu tất cả các trường.");
     }
 
     if (error) {
-      if (error.message.includes("does not exist")) {
+      if (error.message.includes("relation") && error.message.includes("does not exist")) {
         setDbError(true);
         setSaveErrMsg("Bảng 'reconciliations' chưa tồn tại. Chạy SQL bên trên trong Supabase.");
       } else if (error.code === "42501" || error.message.toLowerCase().includes("rls") || error.message.toLowerCase().includes("policy") || error.message.toLowerCase().includes("permission") || error.message.toLowerCase().includes("row-level")) {
@@ -505,7 +546,12 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
 
               {/* Phân loại ngày */}
               <div>
-                <p className="text-xs font-semibold text-foreground mb-2">Phân loại ngày làm việc</p>
+                <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
+                  <span>Phân loại ngày làm việc</span>
+                  {selected && (
+                    <span className="text-xs font-normal text-muted-foreground font-mono">{workDayOfWeek} · {selected.work_date}</span>
+                  )}
+                </p>
                 <div className="flex gap-2">
                   {([
                     ["normal",  "🟢 Thường", "bg-green-600 text-white border-green-600",  "border-green-200 text-green-700 bg-green-50"],
@@ -519,17 +565,50 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                     </button>
                   ))}
                 </div>
-                {dayType !== "normal" && shift && (
-                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mt-2">
-                    ⚠️ Áp dụng mức lương <strong>{dayType === "holiday" ? "ngày lễ" : "ngày nghỉ"}</strong>
-                    {' — '}lương cơ bản: {(dayType === "holiday" ? shift.base_wage_holiday : shift.base_wage_dayoff) || 0 ? fM(dayType === "holiday" ? shift.base_wage_holiday || 0 : shift.base_wage_dayoff || 0) : <span className="text-red-600">chưa cấu hình</span>}
+                {autoReason && (
+                  <p className={`text-xs mt-2 rounded-lg px-3 py-1.5 flex items-center gap-1.5 ${dayType === autoDetectedType ? "bg-blue-50 border border-blue-100 text-blue-700" : "bg-amber-50 border border-amber-100 text-amber-700"}`}>
+                    🤖 Tự động phát hiện: <strong>{autoReason}</strong>
+                    {dayType !== autoDetectedType && <span className="ml-1 opacity-70">(đã thay đổi thủ công)</span>}
+                  </p>
+                )}
+              </div>
+
+              {/* Mức lương theo ca: 8h / 12h */}
+              <div>
+                <p className="text-xs font-semibold text-foreground mb-1.5 flex items-center justify-between">
+                  <span>Mức lương theo ca</span>
+                  {hrs && <span className="text-xs font-normal text-muted-foreground">{fH(hrs.total)} thực tế</span>}
+                </p>
+                <div className="flex gap-2">
+                  {([
+                    ["8h",  "🕗 Ca 8 tiếng",  "bg-indigo-600 text-white border-indigo-600", "border-indigo-200 text-indigo-700 bg-indigo-50"],
+                    ["12h", "🕛 Ca 12 tiếng", "bg-purple-600 text-white border-purple-600", "border-purple-200 text-purple-700 bg-purple-50"],
+                  ] as [string, string, string, string][]).map(([val, label, active, base]) => (
+                    <button key={val} type="button"
+                      onClick={() => setShiftDurationOverride(prev => prev === val ? null : val as "8h" | "12h")}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-bold transition ${shiftDuration === val ? active : base}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {!shiftDurationOverride && hrs && (
+                  <p className="text-xs text-blue-600 mt-1.5 flex items-center gap-1">
+                    🤖 Tự động chọn dựa theo {fH(hrs.total)} thực tế làm việc
+                  </p>
+                )}
+                {shiftDurationOverride && (
+                  <p className="text-xs text-amber-700 mt-1.5 flex items-center gap-1">
+                    ✏️ Đã chọn thủ công ca {shiftDurationOverride} —
+                    <button type="button" className="underline ml-1" onClick={() => setShiftDurationOverride(null)}>đặt lại tự động</button>
                   </p>
                 )}
               </div>
 
               {hrs && (
                 <div className={`bg-gradient-to-br ${wageTheme.grad} rounded-2xl p-4 border`}>
-                  <p className={`text-xs font-semibold ${wageTheme.title} mb-3`}>📊 Kết quả tính toán {wageTheme.label}</p>
+                  <p className={`text-xs font-semibold ${wageTheme.title} mb-3`}>
+                    📊 {wageTheme.label} · Ca {shiftDuration}
+                  </p>
                   <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 text-center mb-4">
                     {[
                       { label: "Tổng giờ", val: fH(hrs.total), color: "text-foreground" },
