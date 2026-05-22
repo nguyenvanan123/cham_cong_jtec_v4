@@ -36,6 +36,10 @@ export type Shift = {
   overtime_wage: number;
   bonus: number;
   attendance_bonus: number;
+  base_wage_dayoff: number;
+  overtime_wage_dayoff: number;
+  base_wage_holiday: number;
+  overtime_wage_holiday: number;
   created_at: string;
 };
 
@@ -62,6 +66,7 @@ export type Reconciliation = {
   check_in_video?: string;
   check_out_video?: string;
   start_date?: string;
+  day_type?: string;
   employee_type?: string;
   notes?: string;
   created_at: string;

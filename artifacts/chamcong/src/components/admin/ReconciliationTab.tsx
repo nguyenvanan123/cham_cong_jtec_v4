@@ -78,6 +78,7 @@ ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_image TEXT DEFAUL
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_in_video TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS check_out_video TEXT DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS start_date TEXT DEFAULT '';
+ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS day_type TEXT DEFAULT 'normal';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS employee_type CHAR(1) DEFAULT '';
 ALTER TABLE reconciliations ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
 
@@ -106,6 +107,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [employeeType, setEmployeeType] = useState<"N" | "O" | "">("");
   const [startDate, setStartDate] = useState("");
   const [startDates, setStartDates] = useState<Record<string, string>>({});
+  const [dayType, setDayType] = useState<"normal" | "dayoff" | "holiday">("normal");
+  const [dayTypes, setDayTypes] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
@@ -133,20 +136,23 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     // Load trạng thái đã đối soát + employee_type từ DB
     supabase
       .from("reconciliations")
-      .select("employee_id, employee_type, start_date")
+      .select("employee_id, employee_type, start_date, day_type")
       .eq("work_date", date)
       .then(({ data }) => {
         setSavedIds((data || []).map((r: { employee_id: string }) => r.employee_id));
         const typeMap: Record<string, string> = {};
         const sdMap: Record<string, string> = {};
-        for (const r of (data || []) as { employee_id: string; employee_type?: string; start_date?: string }[]) {
+        const dtMap: Record<string, string> = {};
+        for (const r of (data || []) as { employee_id: string; employee_type?: string; start_date?: string; day_type?: string }[]) {
           const t = r.employee_type || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
           if (t) typeMap[r.employee_id] = t;
           const sd = r.start_date || localStorage.getItem(START_DATE_KEY(r.employee_id)) || "";
           if (sd) sdMap[r.employee_id] = sd;
+          if (r.day_type) dtMap[r.employee_id] = r.day_type;
         }
         setEmpTypes(typeMap);
         setStartDates(sdMap);
+        setDayTypes(dtMap);
       });
   }, [date, allRecords]);
 
@@ -163,6 +169,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setBankAccount("");
     setBankName("");
     setNotes("");
+    setDayType("normal");
     // Load loại NV và ngày vào làm từ localStorage trước (nhanh)
     const storedType = localStorage.getItem(EMP_TYPE_KEY(g.employee_id));
     setEmployeeType((storedType as "N" | "O") || "");
@@ -170,7 +177,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     setStartDate(storedStartDate || "");
     // Nếu đã đối soát trước đó, load lại toàn bộ dữ liệu đã xác nhận
     const { data } = await supabase.from("reconciliations")
-      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, notes")
+      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, day_type, notes")
       .eq("employee_id", g.employee_id)
       .eq("work_date", g.work_date)
       .limit(1);
@@ -178,7 +185,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       const saved = data[0] as {
         check_in_time: string; check_out_time: string;
         shift_name: string; bank_account: string; bank_name: string;
-        employee_type?: string; start_date?: string; notes?: string;
+        employee_type?: string; start_date?: string; day_type?: string; notes?: string;
       };
       if (saved.check_in_time) setInTime(saved.check_in_time);
       if (saved.check_out_time) setOutTime(saved.check_out_time);
@@ -187,6 +194,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       setNotes(saved.notes || "");
       if (saved.employee_type) setEmployeeType(saved.employee_type as "N" | "O");
       if (saved.start_date) setStartDate(saved.start_date);
+      if (saved.day_type) setDayType(saved.day_type as "normal" | "dayoff" | "holiday");
       if (saved.shift_name) {
         const prevShift = shifts.find(s =>
           saved.shift_name.toLowerCase().includes(s.name.toLowerCase()) ||
@@ -212,13 +220,26 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
 
   const shift = shifts.find(s => s.id === shiftId) ?? null;
   const hrs = calcHours(inTime, outTime);
+  const effectiveBaseWage = !shift ? 0
+    : dayType === "holiday" ? (shift.base_wage_holiday || 0)
+    : dayType === "dayoff"  ? (shift.base_wage_dayoff || 0)
+    : shift.base_wage;
+  const effectiveOTWage = !shift ? 0
+    : dayType === "holiday" ? (shift.overtime_wage_holiday || 0)
+    : dayType === "dayoff"  ? (shift.overtime_wage_dayoff || 0)
+    : shift.overtime_wage;
   const wages = hrs && shift ? {
-    base: shift.base_wage,
-    overtime: hrs.overtime * shift.overtime_wage,
+    base: effectiveBaseWage,
+    overtime: hrs.overtime * effectiveOTWage,
     bonus: shift.bonus,
     attendance: shift.attendance_bonus,
-    total: shift.base_wage + hrs.overtime * shift.overtime_wage + shift.bonus + shift.attendance_bonus,
+    total: effectiveBaseWage + hrs.overtime * effectiveOTWage + shift.bonus + shift.attendance_bonus,
   } : null;
+  const wageTheme = dayType === "holiday"
+    ? { grad: "from-red-50 to-rose-50 border-red-100", title: "text-red-700", base: "text-red-700", ot: "text-orange-600", label: "🔴 Ngày lễ" }
+    : dayType === "dayoff"
+    ? { grad: "from-orange-50 to-amber-50 border-orange-100", title: "text-orange-700", base: "text-orange-700", ot: "text-amber-600", label: "🟠 Ngày nghỉ" }
+    : { grad: "from-blue-50 to-indigo-50 border-blue-100", title: "text-foreground", base: "text-green-700", ot: "text-orange-600", label: "🟢 Ngày thường" };
 
   const handleSave = async () => {
     if (!selected) return;
@@ -234,6 +255,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       localStorage.setItem(START_DATE_KEY(selected.employee_id), startDate);
       setStartDates(prev => ({ ...prev, [selected.employee_id]: startDate }));
     }
+    setDayTypes(prev => ({ ...prev, [selected.employee_id]: dayType }));
 
     const baseRec: Omit<Reconciliation, "id" | "created_at" | "employee_type"> = {
       employee_id: selected.employee_id,
@@ -257,6 +279,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       check_in_video: selected.checkIn?.video_url ?? "",
       check_out_video: selected.checkOut?.video_url ?? "",
       start_date: startDate,
+      day_type: dayType,
       notes: notes,
     };
 
@@ -325,7 +348,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
             <table className="w-full min-w-[750px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  {["Trạng thái", "Loại", "Mã NV", "Họ tên", "Ngày vào làm", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
+                  {["Trạng thái", "Loại", "Mã NV", "Họ tên", "Ngày vào làm", "Loại ngày", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -369,6 +392,17 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                         {startDates[g.employee_id]
                           ? <span className="text-violet-700 font-medium">{startDates[g.employee_id]}</span>
                           : <span className="text-muted-foreground/40">—</span>}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {dayTypes[g.employee_id] === "holiday" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">🔴 Ngày lễ</span>
+                        ) : dayTypes[g.employee_id] === "dayoff" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">🟠 Ngày nghỉ</span>
+                        ) : savedIds.includes(g.employee_id) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">🟢 Thường</span>
+                        ) : (
+                          <span className="text-muted-foreground/40 text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
                       <td className="px-4 py-3 text-xs">{g.checkIn ? <span className="text-green-600 font-medium">{toHHMM(g.checkIn.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
@@ -469,9 +503,33 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                 )}
               </div>
 
+              {/* Phân loại ngày */}
+              <div>
+                <p className="text-xs font-semibold text-foreground mb-2">Phân loại ngày làm việc</p>
+                <div className="flex gap-2">
+                  {([
+                    ["normal",  "🟢 Thường", "bg-green-600 text-white border-green-600",  "border-green-200 text-green-700 bg-green-50"],
+                    ["dayoff",  "🟠 Nghỉ",   "bg-orange-500 text-white border-orange-500","border-orange-200 text-orange-600 bg-orange-50"],
+                    ["holiday", "🔴 Lễ",     "bg-red-500 text-white border-red-500",      "border-red-200 text-red-600 bg-red-50"],
+                  ] as [string, string, string, string][]).map(([val, label, active, base]) => (
+                    <button key={val} type="button"
+                      onClick={() => setDayType(val as "normal" | "dayoff" | "holiday")}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-bold transition ${dayType === val ? active : base}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {dayType !== "normal" && shift && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mt-2">
+                    ⚠️ Áp dụng mức lương <strong>{dayType === "holiday" ? "ngày lễ" : "ngày nghỉ"}</strong>
+                    {' — '}lương cơ bản: {(dayType === "holiday" ? shift.base_wage_holiday : shift.base_wage_dayoff) || 0 ? fM(dayType === "holiday" ? shift.base_wage_holiday || 0 : shift.base_wage_dayoff || 0) : <span className="text-red-600">chưa cấu hình</span>}
+                  </p>
+                )}
+              </div>
+
               {hrs && (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-100">
-                  <p className="text-xs font-semibold text-foreground mb-3">📊 Kết quả tính toán</p>
+                <div className={`bg-gradient-to-br ${wageTheme.grad} rounded-2xl p-4 border`}>
+                  <p className={`text-xs font-semibold ${wageTheme.title} mb-3`}>📊 Kết quả tính toán {wageTheme.label}</p>
                   <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 text-center mb-4">
                     {[
                       { label: "Tổng giờ", val: fH(hrs.total), color: "text-foreground" },
@@ -487,8 +545,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                   {wages ? (
                     <div className="space-y-1.5 text-sm">
                       {([
-                        ["Lương cơ bản", wages.base, "text-green-700"],
-                        ["Lương tăng ca", wages.overtime, "text-orange-600"],
+                        ["Lương cơ bản", wages.base, wageTheme.base],
+                        ["Lương tăng ca", wages.overtime, wageTheme.ot],
                         ["Thưởng", wages.bonus, "text-blue-600"],
                         ["Chuyên cần", wages.attendance, "text-violet-600"],
                       ] as [string, number, string][]).map(([label, val, cls]) => (
