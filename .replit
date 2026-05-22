@@ -24,13 +24,12 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=8081 BASE_PATH=/ pnpm --filter @workspace/chamcong run dev --port 5000 --host 0.0.0.0"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+args = "echo 'App is served by the chamcong artifact workflow on port 5000.' && sleep infinity"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
