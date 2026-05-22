@@ -18,6 +18,12 @@ function todayLocal() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function yesterdayLocal() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function toHHMM(isoDate: string) {
   return new Date(isoDate).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
@@ -91,7 +97,8 @@ const EMP_TYPE_KEY = (id: string) => `jtec_emp_type_${id}`;
 const START_DATE_KEY = (id: string) => `jtec_start_date_${id}`;
 
 export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord[] }) {
-  const [date, setDate] = useState(todayLocal());
+  const [dateFrom, setDateFrom] = useState(yesterdayLocal());
+  const [dateTo, setDateTo] = useState(todayLocal());
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Group | null>(null);
@@ -135,52 +142,71 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   }
 
   useEffect(() => {
-    const recs = allRecords.filter(r => r.work_date === date);
+    // Lọc attendance theo khoảng ngày
+    const recs = allRecords.filter(r => r.work_date >= dateFrom && r.work_date <= dateTo);
+    // Key = employee_id + work_date để hỗ trợ nhiều ngày
     const map = new Map<string, Group>();
     for (const r of recs) {
-      if (!map.has(r.employee_id)) {
-        map.set(r.employee_id, { employee_id: r.employee_id, full_name: r.full_name, work_date: r.work_date, shift: r.shift, checkIn: null, checkOut: null });
+      const key = `${r.employee_id}_${r.work_date}`;
+      if (!map.has(key)) {
+        map.set(key, { employee_id: r.employee_id, full_name: r.full_name, work_date: r.work_date, shift: r.shift, checkIn: null, checkOut: null });
       }
-      const g = map.get(r.employee_id)!;
+      const g = map.get(key)!;
       if (r.action_type === "check-in") g.checkIn = r;
       else g.checkOut = r;
     }
-    setGroups(Array.from(map.values()));
-    // Load trạng thái đã đối soát + employee_type từ DB
-    // Kiểm tra cả work_date = date (ca ngày) và work_date_end = date (ca đêm lưu ngày trước)
+    // Sắp xếp theo ngày mới nhất trước
+    setGroups(Array.from(map.values()).sort((a, b) => b.work_date.localeCompare(a.work_date) || a.employee_id.localeCompare(b.employee_id)));
+
+    // Load trạng thái đã đối soát — savedIds lưu dạng "employee_id_attendance_date"
     Promise.all([
       supabase
         .from("reconciliations")
-        .select("employee_id, employee_type, start_date, day_type, work_date_end")
-        .eq("work_date", date),
+        .select("employee_id, employee_type, start_date, day_type, work_date, work_date_end")
+        .gte("work_date", dateFrom)
+        .lte("work_date", dateTo),
       supabase
         .from("reconciliations")
-        .select("employee_id, employee_type, start_date, day_type, work_date_end")
-        .eq("work_date_end", date),
+        .select("employee_id, employee_type, start_date, day_type, work_date, work_date_end")
+        .gte("work_date_end", dateFrom)
+        .lte("work_date_end", dateTo),
     ]).then(([res1, res2]) => {
-      const combined = [...(res1.data || []), ...(res2.data || [])] as { employee_id: string; employee_type?: string; start_date?: string; day_type?: string; work_date_end?: string }[];
-      // Dedupe by employee_id
+      type ReconRow = { employee_id: string; employee_type?: string; start_date?: string; day_type?: string; work_date?: string; work_date_end?: string };
+      const combined = [...(res1.data || []), ...(res2.data || [])] as ReconRow[];
+      // Dedupe by "employee_id_attendance_date"
       const seen = new Set<string>();
-      const deduped = combined.filter(r => { if (seen.has(r.employee_id)) return false; seen.add(r.employee_id); return true; });
-      setSavedIds(deduped.map(r => r.employee_id));
+      const deduped = combined.filter(r => {
+        // Ca đêm: attendance_date = work_date_end; ca ngày: attendance_date = work_date
+        const attendanceDate = (r.work_date_end && r.work_date_end !== r.work_date) ? r.work_date_end : r.work_date;
+        const key = `${r.employee_id}_${attendanceDate}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      // savedIds lưu dạng "employee_id_attendance_date"
+      setSavedIds(deduped.map(r => {
+        const attendanceDate = (r.work_date_end && r.work_date_end !== r.work_date) ? r.work_date_end : r.work_date;
+        return `${r.employee_id}_${attendanceDate}`;
+      }));
       const typeMap: Record<string, string> = {};
       const sdMap: Record<string, string> = {};
       const dtMap: Record<string, string> = {};
       const wedMap: Record<string, string> = {};
       for (const r of deduped) {
-        const t = r.employee_type || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
+        const t = r.employee_type?.trim() || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
         if (t) typeMap[r.employee_id] = t;
         const sd = r.start_date || localStorage.getItem(START_DATE_KEY(r.employee_id)) || "";
         if (sd) sdMap[r.employee_id] = sd;
-        if (r.day_type) dtMap[r.employee_id] = r.day_type;
-        if (r.work_date_end) wedMap[r.employee_id] = r.work_date_end;
+        const attendanceDate = (r.work_date_end && r.work_date_end !== r.work_date) ? r.work_date_end : r.work_date;
+        if (r.day_type && attendanceDate) dtMap[`${r.employee_id}_${attendanceDate}`] = r.day_type;
+        if (r.work_date_end && attendanceDate) wedMap[`${r.employee_id}_${attendanceDate}`] = r.work_date_end;
       }
       setEmpTypes(typeMap);
       setStartDates(sdMap);
       setDayTypes(dtMap);
       setWorkDateEnds(wedMap);
     });
-  }, [date, allRecords]);
+  }, [dateFrom, dateTo, allRecords]);
 
   const openPopup = async (g: Group) => {
     setSelected(g);
@@ -398,7 +424,12 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
         setSaveErrMsg("Lỗi lưu: " + error.message);
       }
     } else {
-      setSavedIds(prev => [...prev.filter(id => id !== selected.employee_id), selected.employee_id]);
+      // savedIds lưu "employee_id_attendance_date"
+      const savedKey = `${selected.employee_id}_${selected.work_date}`;
+      setSavedIds(prev => [...prev.filter(id => id !== savedKey), savedKey]);
+      const gKey = `${selected.employee_id}_${selected.work_date}`;
+      setDayTypes(prev => ({ ...prev, [gKey]: dayType }));
+      if (isOvernightShift && workDateEnd) setWorkDateEnds(prev => ({ ...prev, [gKey]: workDateEnd }));
       if (!saveErrMsg) closePopup();
     }
     setSaving(false);
@@ -416,16 +447,20 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       )}
 
       <div className="bg-white rounded-2xl border border-border shadow-sm p-4 flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <CalendarCheck size={18} className="text-muted-foreground" />
-          <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Ngày đối soát</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
-          </div>
+        <CalendarCheck size={18} className="text-muted-foreground shrink-0" />
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Từ ngày</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+        </div>
+        <span className="text-muted-foreground text-sm">→</span>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Đến ngày</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
         </div>
         <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">
-          <span>{groups.length} nhân viên</span>
+          <span>{groups.length} bản ghi</span>
           <span>·</span>
           <span className="text-green-600">{savedIds.length} đã đối soát</span>
         </div>
@@ -435,24 +470,25 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
         {groups.length === 0 ? (
           <div className="p-16 text-center">
             <Search size={32} className="mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">Không có dữ liệu chấm công ngày {date}</p>
+            <p className="text-sm text-muted-foreground">Không có dữ liệu chấm công từ {dateFrom} đến {dateTo}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[750px] text-sm">
+            <table className="w-full min-w-[800px] text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  {["Trạng thái", "Loại", "Mã NV", "Họ tên", "Ngày vào làm", "Loại ngày", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
+                  {["Trạng thái", "Loại", "Ngày", "Mã NV", "Họ tên", "Ngày vào làm", "Loại ngày", "Ca làm", "Check-in", "Check-out", "TG gửi", ""].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {groups.map(g => {
-                  const saved = savedIds.includes(g.employee_id);
+                  const gKey = `${g.employee_id}_${g.work_date}`;
+                  const saved = savedIds.includes(gKey);
                   const complete = !!g.checkIn && !!g.checkOut;
                   return (
-                    <tr key={g.employee_id} className="hover:bg-muted/20 transition-colors">
+                    <tr key={gKey} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3">
                         {saved ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
@@ -480,6 +516,10 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                           <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs">?</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap font-medium text-muted-foreground">
+                        {g.work_date.slice(5).replace("-", "/")}
+                        <span className="block text-[10px] text-muted-foreground/60">{getDayOfWeekShort(g.work_date)}</span>
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs font-bold">{g.employee_id}</td>
                       <td className="px-4 py-3 font-medium">{g.full_name}</td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
@@ -488,11 +528,11 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                           : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {dayTypes[g.employee_id] === "holiday" ? (
+                        {dayTypes[gKey] === "holiday" ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">🔴 Ngày lễ</span>
-                        ) : dayTypes[g.employee_id] === "dayoff" ? (
+                        ) : dayTypes[gKey] === "dayoff" ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">🟠 Ngày nghỉ</span>
-                        ) : savedIds.includes(g.employee_id) ? (
+                        ) : saved ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">🟢 Thường</span>
                         ) : (
                           <span className="text-muted-foreground/40 text-xs">—</span>
@@ -500,8 +540,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                         <span>{g.shift.split("(")[0].trim()}</span>
-                        {workDateEnds[g.employee_id] && (
-                          <span className="block text-indigo-600 font-medium text-[10px]">🌙 {date.slice(5)} → {workDateEnds[g.employee_id].slice(5)}</span>
+                        {workDateEnds[gKey] && (
+                          <span className="block text-indigo-600 font-medium text-[10px]">🌙 {g.work_date.slice(5)} → {workDateEnds[gKey].slice(5)}</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs">{g.checkIn ? <span className="text-green-600 font-medium">{toHHMM(g.checkIn.created_at)}</span> : <span className="text-muted-foreground">—</span>}</td>
