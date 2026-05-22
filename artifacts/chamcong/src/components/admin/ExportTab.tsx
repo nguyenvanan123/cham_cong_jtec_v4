@@ -94,8 +94,11 @@ export function ExportTab() {
     const headerRow = `<tr style="background:#e2e8f0;font-weight:bold">${headers.map(h => `<td>${esc(h)}</td>`).join("")}</tr>`;
     const dataRows = filtered.map(r => {
       const cas = getRowCase(r);
+      const workDateDisplay = r.work_date_end && r.work_date_end !== r.work_date
+        ? `${r.work_date} → ${r.work_date_end}`
+        : r.work_date;
       const cells = [
-        r.employee_type || "", r.start_date || "", DAY_TYPE_LABEL[r.day_type || "normal"] || "Ngày thường", r.work_date, r.employee_id, r.full_name, r.shift_name,
+        r.employee_type || "", r.start_date || "", DAY_TYPE_LABEL[r.day_type || "normal"] || "Ngày thường", workDateDisplay, r.employee_id, r.full_name, r.shift_name,
         r.check_in_time, r.check_out_time,
         r.total_hours.toFixed(2), r.normal_hours.toFixed(2), r.overtime_hours.toFixed(2),
         r.base_wage, r.overtime_pay, r.bonus, r.attendance_bonus, r.total_wage,
@@ -295,7 +298,11 @@ export function ExportTab() {
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">🟢 Thường</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{r.work_date}</td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {r.work_date_end && r.work_date_end !== r.work_date
+                          ? <span className="text-indigo-700 font-medium">🌙 {r.work_date}<br/>→ {r.work_date_end}</span>
+                          : r.work_date}
+                      </td>
                       <td className="px-3 py-3 font-mono text-xs font-bold">{r.employee_id}</td>
                       <td className="px-3 py-3 font-medium whitespace-nowrap">{r.full_name}</td>
                       <td className="px-3 py-3 text-xs text-muted-foreground max-w-[80px] truncate">{r.shift_name?.split("(")[0]?.trim()}</td>

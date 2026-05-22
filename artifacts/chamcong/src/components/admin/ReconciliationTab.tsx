@@ -113,6 +113,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [dayTypes, setDayTypes] = useState<Record<string, string>>({});
   const [shiftDurationOverride, setShiftDurationOverride] = useState<"8h" | "12h" | null>(null);
   const [notes, setNotes] = useState("");
+  const [workDateStart, setWorkDateStart] = useState("");
   const [workDateEnd, setWorkDateEnd] = useState("");
   const [workDateEnds, setWorkDateEnds] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -125,6 +126,13 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   }, []);
 
   useEffect(() => { loadShifts(); }, [loadShifts]);
+
+  // Tính ngày hôm trước
+  function prevDay(dateStr: string) {
+    const d = new Date(dateStr + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  }
 
   useEffect(() => {
     const recs = allRecords.filter(r => r.work_date === date);
@@ -139,29 +147,39 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     }
     setGroups(Array.from(map.values()));
     // Load trạng thái đã đối soát + employee_type từ DB
-    supabase
-      .from("reconciliations")
-      .select("employee_id, employee_type, start_date, day_type, work_date_end")
-      .eq("work_date", date)
-      .then(({ data }) => {
-        setSavedIds((data || []).map((r: { employee_id: string }) => r.employee_id));
-        const typeMap: Record<string, string> = {};
-        const sdMap: Record<string, string> = {};
-        const dtMap: Record<string, string> = {};
-        const wedMap: Record<string, string> = {};
-        for (const r of (data || []) as { employee_id: string; employee_type?: string; start_date?: string; day_type?: string; work_date_end?: string }[]) {
-          const t = r.employee_type || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
-          if (t) typeMap[r.employee_id] = t;
-          const sd = r.start_date || localStorage.getItem(START_DATE_KEY(r.employee_id)) || "";
-          if (sd) sdMap[r.employee_id] = sd;
-          if (r.day_type) dtMap[r.employee_id] = r.day_type;
-          if (r.work_date_end) wedMap[r.employee_id] = r.work_date_end;
-        }
-        setEmpTypes(typeMap);
-        setStartDates(sdMap);
-        setDayTypes(dtMap);
-        setWorkDateEnds(wedMap);
-      });
+    // Kiểm tra cả work_date = date (ca ngày) và work_date_end = date (ca đêm lưu ngày trước)
+    Promise.all([
+      supabase
+        .from("reconciliations")
+        .select("employee_id, employee_type, start_date, day_type, work_date_end")
+        .eq("work_date", date),
+      supabase
+        .from("reconciliations")
+        .select("employee_id, employee_type, start_date, day_type, work_date_end")
+        .eq("work_date_end", date),
+    ]).then(([res1, res2]) => {
+      const combined = [...(res1.data || []), ...(res2.data || [])] as { employee_id: string; employee_type?: string; start_date?: string; day_type?: string; work_date_end?: string }[];
+      // Dedupe by employee_id
+      const seen = new Set<string>();
+      const deduped = combined.filter(r => { if (seen.has(r.employee_id)) return false; seen.add(r.employee_id); return true; });
+      setSavedIds(deduped.map(r => r.employee_id));
+      const typeMap: Record<string, string> = {};
+      const sdMap: Record<string, string> = {};
+      const dtMap: Record<string, string> = {};
+      const wedMap: Record<string, string> = {};
+      for (const r of deduped) {
+        const t = r.employee_type || localStorage.getItem(EMP_TYPE_KEY(r.employee_id)) || "";
+        if (t) typeMap[r.employee_id] = t;
+        const sd = r.start_date || localStorage.getItem(START_DATE_KEY(r.employee_id)) || "";
+        if (sd) sdMap[r.employee_id] = sd;
+        if (r.day_type) dtMap[r.employee_id] = r.day_type;
+        if (r.work_date_end) wedMap[r.employee_id] = r.work_date_end;
+      }
+      setEmpTypes(typeMap);
+      setStartDates(sdMap);
+      setDayTypes(dtMap);
+      setWorkDateEnds(wedMap);
+    });
   }, [date, allRecords]);
 
   const openPopup = async (g: Group) => {
@@ -169,28 +187,24 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     // Đặt giá trị mặc định từ attendance trước
     setInTime(g.checkIn ? toHHMM(g.checkIn.created_at) : "");
     setOutTime(g.checkOut ? toHHMM(g.checkOut.created_at) : "");
+    // Khớp ca: ưu tiên đúng tên ca nhân viên đã chọn, không fallback về ca đầu tiên
     const matched = shifts.find(s =>
       g.shift.toLowerCase().includes(s.name.toLowerCase()) ||
       s.name.toLowerCase().includes(g.shift.split(" ")[0].toLowerCase())
     );
-    setShiftId(matched?.id ?? shifts[0]?.id ?? "");
+    setShiftId(matched?.id ?? "");
     setBankAccount("");
     setBankName("");
     setNotes("");
     setDayType(detectDayType(g.work_date));
     setShiftDurationOverride(null);
-    // Overnight shift: tự động tính ngày kết thúc
+    // Overnight shift: ngày bắt đầu = ngày TRƯỚC ngày nhân viên gửi, ngày kết thúc = ngày gửi
     const isOvernightMatched = matched ? matched.end_time < matched.start_time : false;
     if (isOvernightMatched) {
-      const defaultEnd = g.checkOut
-        ? g.checkOut.created_at.split('T')[0]
-        : (() => {
-            const d = new Date(g.work_date + 'T12:00:00');
-            d.setDate(d.getDate() + 1);
-            return d.toISOString().split('T')[0];
-          })();
-      setWorkDateEnd(defaultEnd);
+      setWorkDateStart(prevDay(g.work_date));
+      setWorkDateEnd(g.work_date);
     } else {
+      setWorkDateStart(g.work_date);
       setWorkDateEnd("");
     }
     // Load loại NV và ngày vào làm từ localStorage trước (nhanh)
@@ -199,16 +213,28 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     const storedStartDate = localStorage.getItem(START_DATE_KEY(g.employee_id));
     setStartDate(storedStartDate || "");
     // Nếu đã đối soát trước đó, load lại toàn bộ dữ liệu đã xác nhận
-    const { data } = await supabase.from("reconciliations")
-      .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, day_type, notes, work_date_end")
-      .eq("employee_id", g.employee_id)
-      .eq("work_date", g.work_date)
-      .limit(1);
-    if (data?.[0]) {
-      const saved = data[0] as {
+    // Ca đêm: tìm theo work_date = ngày trước, hoặc work_date_end = ngày hiện tại
+    const [res1, res2] = await Promise.all([
+      supabase.from("reconciliations")
+        .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, day_type, notes, work_date, work_date_end")
+        .eq("employee_id", g.employee_id)
+        .eq("work_date", isOvernightMatched ? prevDay(g.work_date) : g.work_date)
+        .limit(1),
+      isOvernightMatched
+        ? supabase.from("reconciliations")
+            .select("check_in_time, check_out_time, shift_name, bank_account, bank_name, employee_type, start_date, day_type, notes, work_date, work_date_end")
+            .eq("employee_id", g.employee_id)
+            .eq("work_date_end", g.work_date)
+            .limit(1)
+        : Promise.resolve({ data: [] }),
+    ]);
+    const savedRaw = res1.data?.[0] || res2.data?.[0];
+    if (savedRaw) {
+      const saved = savedRaw as {
         check_in_time: string; check_out_time: string;
         shift_name: string; bank_account: string; bank_name: string;
-        employee_type?: string; start_date?: string; day_type?: string; notes?: string; work_date_end?: string;
+        employee_type?: string; start_date?: string; day_type?: string; notes?: string;
+        work_date?: string; work_date_end?: string;
       };
       if (saved.check_in_time) setInTime(saved.check_in_time);
       if (saved.check_out_time) setOutTime(saved.check_out_time);
@@ -218,7 +244,11 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       if (saved.employee_type) setEmployeeType(saved.employee_type as "N" | "O");
       if (saved.start_date) setStartDate(saved.start_date);
       if (saved.day_type) setDayType(saved.day_type as "normal" | "dayoff" | "holiday");
-      if (saved.work_date_end) setWorkDateEnd(saved.work_date_end);
+      // Khôi phục ngày bắt đầu/kết thúc ca đêm đã lưu
+      if (isOvernightMatched) {
+        if (saved.work_date) setWorkDateStart(saved.work_date);
+        if (saved.work_date_end) setWorkDateEnd(saved.work_date_end);
+      }
       if (saved.shift_name) {
         const prevShift = shifts.find(s =>
           saved.shift_name.toLowerCase().includes(s.name.toLowerCase()) ||
@@ -228,7 +258,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       }
     }
     // Nếu chưa có trong bản ghi hôm nay, tìm start_date từ bất kỳ ngày nào trước đó
-    if (!data?.[0]?.start_date && !storedStartDate) {
+    if (!savedRaw?.start_date && !storedStartDate) {
       const { data: anyRec } = await supabase.from("reconciliations")
         .select("start_date")
         .eq("employee_id", g.employee_id)
@@ -297,7 +327,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
     const baseRec: Omit<Reconciliation, "id" | "created_at" | "employee_type"> = {
       employee_id: selected.employee_id,
       full_name: selected.full_name,
-      work_date: selected.work_date,
+      // Ca đêm: lưu work_date = ngày bắt đầu ca (ngày trước), ca ngày: lưu work_date = ngày gửi dữ liệu
+      work_date: isOvernightShift ? workDateStart : selected.work_date,
       shift_name: shift?.name ?? selected.shift,
       check_in_time: inTime,
       check_out_time: outTime,
@@ -506,8 +537,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
               <div>
                 <h3 className="text-white font-bold">{selected.full_name}</h3>
                 <p className="text-white/70 text-xs">
-                  {selected.employee_id} · {isOvernightShift && workDateEnd
-                    ? `${selected.work_date} → ${workDateEnd}`
+                  {selected.employee_id} · {isOvernightShift && workDateStart && workDateEnd
+                    ? `${workDateStart} → ${workDateEnd}`
                     : selected.work_date}
                 </p>
               </div>
@@ -571,16 +602,16 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Ngày bắt đầu</label>
-                      <input type="date" value={selected.work_date} readOnly
-                        className="w-full px-3 py-2 rounded-xl border border-input bg-muted/30 text-sm text-muted-foreground cursor-not-allowed" />
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Lấy từ dữ liệu chấm công</p>
+                      <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Ngày bắt đầu *</label>
+                      <input type="date" value={workDateStart} onChange={e => setWorkDateStart(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                      <p className="text-[10px] text-indigo-500 mt-0.5">Mặc định: ngày trước ngày gửi</p>
                     </div>
                     <div>
                       <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Ngày kết thúc *</label>
                       <input type="date" value={workDateEnd} onChange={e => setWorkDateEnd(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                      <p className="text-[10px] text-indigo-500 mt-0.5">Admin có thể chỉnh sửa</p>
+                      <p className="text-[10px] text-indigo-500 mt-0.5">Mặc định: ngày nhân viên gửi dữ liệu</p>
                     </div>
                   </div>
                 </div>
