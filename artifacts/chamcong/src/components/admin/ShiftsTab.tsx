@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Shift } from "@/lib/supabase";
-import { Plus, Pencil, Trash2, Save, X, RefreshCw, Layers, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, X, RefreshCw, Layers, Link2, Copy } from "lucide-react";
 
 type ShiftForm = Omit<Shift, "id" | "created_at">;
 
@@ -174,6 +174,24 @@ export function ShiftsTab() {
   useEffect(() => { load(); }, [load]);
 
   const openAdd = () => { setEditId(null); setForm({ ...EMPTY }); setSaveError(null); setModal(true); };
+  const openClone = (s: Shift) => {
+    setEditId(null);
+    setForm({
+      name: `${s.name} (copy)`,
+      start_time: s.start_time, end_time: s.end_time,
+      base_wage: s.base_wage, overtime_wage: s.overtime_wage,
+      bonus: s.bonus, attendance_bonus: s.attendance_bonus,
+      base_wage_dayoff: s.base_wage_dayoff ?? 0,
+      overtime_wage_dayoff: s.overtime_wage_dayoff ?? 0,
+      base_wage_holiday: s.base_wage_holiday ?? 0,
+      overtime_wage_holiday: s.overtime_wage_holiday ?? 0,
+      base_wage_12h: s.base_wage_12h ?? 0,
+      base_wage_dayoff_12h: s.base_wage_dayoff_12h ?? 0,
+      base_wage_holiday_12h: s.base_wage_holiday_12h ?? 0,
+    });
+    setSaveError(null);
+    setModal(true);
+  };
   const openEdit = (s: Shift) => {
     setEditId(s.id);
     setForm({
@@ -307,10 +325,13 @@ export function ShiftsTab() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition">
+                        <button onClick={() => openEdit(s)} title="Sửa" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(s.id)} disabled={deleting === s.id} className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500 transition disabled:opacity-50">
+                        <button onClick={() => openClone(s)} title="Sao chép ca" className="p-1.5 rounded-lg hover:bg-blue-50 text-muted-foreground hover:text-blue-500 transition">
+                          <Copy size={13} />
+                        </button>
+                        <button onClick={() => handleDelete(s.id)} disabled={deleting === s.id} title="Xóa" className="p-1.5 rounded-lg hover:bg-red-50 text-muted-foreground hover:text-red-500 transition disabled:opacity-50">
                           {deleting === s.id ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
                         </button>
                       </div>
