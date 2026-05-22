@@ -29,6 +29,7 @@ type GroupedEmployee = {
   employee_id: string;
   full_name: string;
   work_date: string;
+  work_date_end?: string | null;
   shift: string;
   records: AttendanceRecord[];
 };
@@ -41,8 +42,10 @@ function groupByEmployee(records: AttendanceRecord[]): GroupedEmployee[] {
   for (const r of records) {
     const key = `${r.employee_id}__${r.work_date}`;
     if (!map.has(key)) {
-      map.set(key, { employee_id: r.employee_id, full_name: r.full_name, work_date: r.work_date, shift: r.shift, records: [] });
+      map.set(key, { employee_id: r.employee_id, full_name: r.full_name, work_date: r.work_date, work_date_end: r.work_date_end, shift: r.shift, records: [] });
     }
+    // Giữ work_date_end nếu record có
+    if (r.work_date_end) map.get(key)!.work_date_end = r.work_date_end;
     map.get(key)!.records.push(r);
   }
   return Array.from(map.values()).sort((a, b) => b.work_date.localeCompare(a.work_date));
@@ -408,7 +411,11 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                         </td>
                         <td className="px-4 py-3 font-mono text-xs font-bold text-foreground">{g.employee_id}</td>
                         <td className="px-4 py-3 text-foreground font-medium">{g.full_name}</td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{g.work_date}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                          {g.work_date_end && g.work_date_end !== g.work_date
+                            ? <span>{g.work_date} <span className="text-indigo-500">→</span> {g.work_date_end}</span>
+                            : g.work_date}
+                        </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                           {(inRec ?? outRec) ? (

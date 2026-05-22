@@ -14,6 +14,7 @@ export type AttendanceRecord = {
   employee_id: string;
   full_name: string;
   work_date: string;
+  work_date_end?: string | null;
   shift: string;
   action_type: "check-in" | "check-out";
   image_url: string | null;

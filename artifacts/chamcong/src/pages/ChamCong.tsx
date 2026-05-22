@@ -126,6 +126,12 @@ function today() {
   return new Date().toISOString().split("T")[0];
 }
 
+function yesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split("T")[0];
+}
+
 type UploadStep = 1 | 2 | "done";
 
 type TodayStatus = {
@@ -141,6 +147,7 @@ export default function ChamCong() {
   const [employeeId, setEmployeeId] = useState("");
   const [fullName, setFullName] = useState("");
   const [workDate, setWorkDate] = useState(today());
+  const [workDateEnd, setWorkDateEnd] = useState(today());
   const [todayStatus, setTodayStatus] = useState<TodayStatus>(null);
   const statusDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shift, setShift] = useState("");
@@ -304,6 +311,19 @@ export default function ChamCong() {
         }
       });
   }, []);
+
+  // Khi chọn ca đêm (end_time < start_time): tự động đặt ngày bắt đầu = hôm qua, ngày kết thúc = hôm nay
+  useEffect(() => {
+    if (dbShifts.length === 0 || !shift) return;
+    const sel = dbShifts.find(s => shift.toLowerCase().includes(s.name.toLowerCase()));
+    const isOvernight = sel ? sel.end_time < sel.start_time : false;
+    if (isOvernight) {
+      setWorkDate(yesterday());
+      setWorkDateEnd(today());
+    } else {
+      setWorkDate(today());
+    }
+  }, [shift, dbShifts]);
 
   useEffect(() => {
     if (!attendanceOpenTime || !attendanceCloseTime) return;
@@ -521,21 +541,22 @@ export default function ChamCong() {
         const ciImageUrl = checkInBlob ? await uploadPhoto(checkInBlob, "check-in") : null;
         const ciVideoUrl = checkInVideoBlob ? (setUploadProgress("Đang upload video check-in... (1/2)"), await uploadVideo(checkInVideoBlob, "check-in")) : null;
         setUploadProgress("Đang lưu dữ liệu check-in...");
-        inserts.push(
-          Promise.resolve(
-            supabase.from("attendance").insert({
-              employee_id: eid,
-              full_name: fullName.trim(),
-              work_date: workDate,
-              shift,
-              action_type: "check-in",
-              image_url: ciImageUrl,
-              video_url: ciVideoUrl,
-            }).then(({ error }) => {
-              if (error) throw new Error("Lỗi lưu check-in: " + error.message);
-            })
-          )
-        );
+        const selShiftCI = dbShifts.find(s => shift.toLowerCase().includes(s.name.toLowerCase()));
+        const isOvernightCI = selShiftCI ? selShiftCI.end_time < selShiftCI.start_time : false;
+        inserts.push((async () => {
+          const payload: Record<string, unknown> = {
+            employee_id: eid, full_name: fullName.trim(), work_date: workDate,
+            ...(isOvernightCI && workDateEnd ? { work_date_end: workDateEnd } : {}),
+            shift, action_type: "check-in", image_url: ciImageUrl, video_url: ciVideoUrl,
+          };
+          let { error } = await supabase.from("attendance").insert(payload);
+          // Retry không có work_date_end nếu cột chưa tồn tại trong DB
+          if (error?.message?.includes("work_date_end") || (error?.message?.includes("column") && error.message.includes("does not exist"))) {
+            const { work_date_end: _, ...payloadNoEnd } = payload;
+            ({ error } = await supabase.from("attendance").insert(payloadNoEnd));
+          }
+          if (error) throw new Error("Lỗi lưu check-in: " + error.message);
+        })());
       }
 
       // Lưu check-out nếu chưa có
@@ -544,21 +565,22 @@ export default function ChamCong() {
         const coImageUrl = checkOutBlob ? await uploadPhoto(checkOutBlob, "check-out") : null;
         const coVideoUrl = checkOutVideoBlob ? (setUploadProgress("Đang upload video check-out... (2/2)"), await uploadVideo(checkOutVideoBlob, "check-out")) : null;
         setUploadProgress("Đang lưu dữ liệu check-out...");
-        inserts.push(
-          Promise.resolve(
-            supabase.from("attendance").insert({
-              employee_id: eid,
-              full_name: fullName.trim(),
-              work_date: workDate,
-              shift,
-              action_type: "check-out",
-              image_url: coImageUrl,
-              video_url: coVideoUrl,
-            }).then(({ error }) => {
-              if (error) throw new Error("Lỗi lưu check-out: " + error.message);
-            })
-          )
-        );
+        const selShiftCO = dbShifts.find(s => shift.toLowerCase().includes(s.name.toLowerCase()));
+        const isOvernightCO = selShiftCO ? selShiftCO.end_time < selShiftCO.start_time : false;
+        inserts.push((async () => {
+          const payload: Record<string, unknown> = {
+            employee_id: eid, full_name: fullName.trim(), work_date: workDate,
+            ...(isOvernightCO && workDateEnd ? { work_date_end: workDateEnd } : {}),
+            shift, action_type: "check-out", image_url: coImageUrl, video_url: coVideoUrl,
+          };
+          let { error } = await supabase.from("attendance").insert(payload);
+          // Retry không có work_date_end nếu cột chưa tồn tại trong DB
+          if (error?.message?.includes("work_date_end") || (error?.message?.includes("column") && error.message.includes("does not exist"))) {
+            const { work_date_end: _, ...payloadNoEnd } = payload;
+            ({ error } = await supabase.from("attendance").insert(payloadNoEnd));
+          }
+          if (error) throw new Error("Lỗi lưu check-out: " + error.message);
+        })());
       }
 
       setUploadProgress("Hoàn tất, đang xác nhận...");
@@ -710,16 +732,44 @@ export default function ChamCong() {
                 className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium text-muted-foreground mb-1 block">Ngày làm việc</label>
-              <input
-                data-testid="input-work-date"
-                type="date"
-                value={workDate}
-                onChange={(e) => setWorkDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
-              />
-            </div>
+            {(() => {
+              const selShift = dbShifts.find(s => shift.toLowerCase().includes(s.name.toLowerCase()));
+              const isOvernight = selShift ? selShift.end_time < selShift.start_time : false;
+              return isOvernight ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Ngày bắt đầu ca 🌙</label>
+                    <input
+                      data-testid="input-work-date"
+                      type="date"
+                      value={workDate}
+                      onChange={(e) => setWorkDate(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-indigo-300 bg-indigo-50 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40 transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Ngày kết thúc ca</label>
+                    <input
+                      type="date"
+                      value={workDateEnd}
+                      onChange={(e) => setWorkDateEnd(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-indigo-300 bg-indigo-50 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40 transition"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-1 block">Ngày làm việc</label>
+                  <input
+                    data-testid="input-work-date"
+                    type="date"
+                    value={workDate}
+                    onChange={(e) => setWorkDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition"
+                  />
+                </div>
+              );
+            })()}
             <div>
               <label className="text-sm font-medium text-muted-foreground mb-1 block">Ca làm việc</label>
               <select
