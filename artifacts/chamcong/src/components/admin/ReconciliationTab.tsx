@@ -452,20 +452,22 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-border shadow-sm p-4 flex flex-wrap items-center gap-4">
-        <CalendarCheck size={18} className="text-muted-foreground shrink-0" />
-        <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Từ ngày</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+      <div className="bg-white rounded-2xl border border-border shadow-sm p-4 flex flex-wrap items-center gap-3 sm:gap-4">
+        <CalendarCheck size={18} className="text-muted-foreground shrink-0 hidden sm:block" />
+        <div className="flex items-end gap-2 flex-wrap w-full sm:w-auto">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Từ ngày</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+          </div>
+          <span className="text-muted-foreground text-sm pb-2">→</span>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Đến ngày</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
+          </div>
         </div>
-        <span className="text-muted-foreground text-sm">→</span>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Đến ngày</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
-        </div>
-        <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground sm:ml-auto">
           <span>{groups.length} bản ghi</span>
           <span>·</span>
           <span className="text-green-600">{savedIds.length} đã đối soát</span>

@@ -385,15 +385,15 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] text-sm">
+              <table className="w-full min-w-[320px] sm:min-w-[500px] md:min-w-[700px] text-sm">
                 <thead className="bg-muted/40 border-b border-border">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide w-24">Trạng thái</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Mã NV</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Họ tên</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Ngày</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Ca</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">TG gửi</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden sm:table-cell">Ngày</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden md:table-cell">Ca</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide hidden md:table-cell">TG gửi</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide">Media</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide w-12"></th>
                   </tr>
@@ -420,13 +420,13 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                         </td>
                         <td className="px-4 py-3 font-mono text-xs font-bold text-foreground">{g.employee_id}</td>
                         <td className="px-4 py-3 text-foreground font-medium">{g.full_name}</td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap hidden sm:table-cell">
                           {g.work_date_end && g.work_date_end !== g.work_date
                             ? <span>{g.work_date} <span className="text-indigo-500">→</span> {g.work_date_end}</span>
                             : g.work_date}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{g.shift.split("(")[0].trim()}</td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap hidden md:table-cell">{g.shift.split("(")[0].trim()}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap hidden md:table-cell">
                           {(inRec ?? outRec) ? (
                             <span className="flex flex-col">
                               <span>{new Date((inRec ?? outRec)!.created_at).toLocaleDateString("vi-VN")}</span>
