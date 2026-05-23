@@ -45,6 +45,9 @@ async function retryUpload<T>(
 }
 
 async function compressVideo(file: File): Promise<Blob> {
+  // Skip compression for small files — already lightweight enough
+  if (file.size < 5 * 1024 * 1024) return file;
+
   return new Promise((resolve) => {
     const supported =
       typeof window !== "undefined" &&
@@ -63,7 +66,8 @@ async function compressVideo(file: File): Promise<Blob> {
 
     video.onloadedmetadata = () => {
       try {
-        const maxDim = 1080;
+        // 480p is plenty for attendance face verification — 3–4x faster than 1080p
+        const maxDim = 480;
         const vw = video.videoWidth || maxDim;
         const vh = video.videoHeight || maxDim;
         const scale = Math.min(1, maxDim / Math.max(vw, vh));
@@ -74,7 +78,8 @@ async function compressVideo(file: File): Promise<Blob> {
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext("2d")!;
-        const stream = canvas.captureStream(30);
+        // 15fps — halves CPU work vs 30fps, imperceptible for face verification
+        const stream = canvas.captureStream(15);
 
         const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
           ? "video/webm;codecs=vp9"
@@ -82,7 +87,8 @@ async function compressVideo(file: File): Promise<Blob> {
           ? "video/webm;codecs=vp8"
           : "video/webm";
 
-        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 });
+        // 800 Kbps — ~3x smaller than 2.5 Mbps, still clear at 480p
+        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 800_000 });
         const chunks: BlobPart[] = [];
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
@@ -395,14 +401,18 @@ export default function ChamCong() {
   const handleCheckInVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 200MB.");
+    if (file.size > 100 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
       e.target.value = "";
       return;
     }
-    const estMinutes = Math.ceil((file.size / (1024 * 1024)) / 50);
     e.target.value = "";
-    setCompressingMsg(`Đang xử lý video check-in... (ước tính ~${estMinutes} phút, vui lòng không tắt trang)`);
+    const mb = file.size / (1024 * 1024);
+    const skipCompress = mb < 5;
+    const estMsg = skipCompress
+      ? "Đang xử lý video check-in..."
+      : `Đang nén video check-in về 480p... (~${Math.ceil(mb / 15)} phút)`;
+    setCompressingMsg(estMsg);
     setCompressing(true);
     const compressed = await compressVideo(file);
     setCompressing(false);
@@ -414,14 +424,18 @@ export default function ChamCong() {
   const handleCheckOutVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 200MB.");
+    if (file.size > 100 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
       e.target.value = "";
       return;
     }
-    const estMinutes = Math.ceil((file.size / (1024 * 1024)) / 50);
     e.target.value = "";
-    setCompressingMsg(`Đang xử lý video check-out... (ước tính ~${estMinutes} phút, vui lòng không tắt trang)`);
+    const mb = file.size / (1024 * 1024);
+    const skipCompress = mb < 5;
+    const estMsg = skipCompress
+      ? "Đang xử lý video check-out..."
+      : `Đang nén video check-out về 480p... (~${Math.ceil(mb / 15)} phút)`;
+    setCompressingMsg(estMsg);
     setCompressing(true);
     const compressed = await compressVideo(file);
     setCompressing(false);
