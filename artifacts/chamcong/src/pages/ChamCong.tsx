@@ -44,87 +44,41 @@ async function retryUpload<T>(
   throw lastError;
 }
 
-async function compressVideo(file: File): Promise<Blob> {
-  // Skip compression for small files — already lightweight enough
-  if (file.size < 5 * 1024 * 1024) return file;
+const CLOUDINARY_CLOUD = "dtvqq32lt";
+const CLOUDINARY_PRESET = "chamcong_unsigned";
 
-  return new Promise((resolve) => {
-    const supported =
-      typeof window !== "undefined" &&
-      window.MediaRecorder &&
-      (MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ||
-        MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ||
-        MediaRecorder.isTypeSupported("video/webm"));
-    if (!supported) { resolve(file); return; }
+// Upload video thẳng lên Cloudinary CDN (không qua backend, không nén CPU)
+// onProgress: callback nhận 0–100
+function uploadVideoToCloudinary(
+  file: File,
+  onProgress: (pct: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
 
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "auto";
-    const src = URL.createObjectURL(file);
-    video.src = src;
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/video/upload`);
 
-    video.onloadedmetadata = () => {
-      try {
-        // 480p is plenty for attendance face verification — 3–4x faster than 1080p
-        const maxDim = 480;
-        const vw = video.videoWidth || maxDim;
-        const vh = video.videoHeight || maxDim;
-        const scale = Math.min(1, maxDim / Math.max(vw, vh));
-        const w = Math.max(2, Math.round(vw * scale));
-        const h = Math.max(2, Math.round(vh * scale));
-
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d")!;
-        // 15fps — halves CPU work vs 30fps, imperceptible for face verification
-        const stream = canvas.captureStream(15);
-
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-          ? "video/webm;codecs=vp9"
-          : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
-          ? "video/webm;codecs=vp8"
-          : "video/webm";
-
-        // 800 Kbps — ~3x smaller than 2.5 Mbps, still clear at 480p
-        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 800_000 });
-        const chunks: BlobPart[] = [];
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-
-        let animFrame: number;
-        const drawFrame = () => {
-          if (!video.paused && !video.ended) {
-            ctx.drawImage(video, 0, 0, w, h);
-            animFrame = requestAnimationFrame(drawFrame);
-          }
-        };
-
-        const timeout = setTimeout(() => {
-          cancelAnimationFrame(animFrame);
-          if (recorder.state === "recording") recorder.stop();
-        }, (video.duration || 60) * 1000 + 5000);
-
-        recorder.onstop = () => {
-          clearTimeout(timeout);
-          URL.revokeObjectURL(src);
-          const result = new Blob(chunks, { type: "video/webm" });
-          resolve(result.size > 0 && result.size < file.size ? result : file);
-        };
-
-        recorder.start(100);
-        video.play().then(() => { drawFrame(); }).catch(() => { if (recorder.state === "recording") recorder.stop(); });
-        video.onended = () => {
-          cancelAnimationFrame(animFrame);
-          ctx.drawImage(video, 0, 0, w, h);
-          if (recorder.state === "recording") recorder.stop();
-        };
-      } catch {
-        URL.revokeObjectURL(src);
-        resolve(file);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
       }
     };
-    video.onerror = () => { URL.revokeObjectURL(src); resolve(file); };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText);
+        onProgress(100);
+        resolve(data.secure_url as string);
+      } else {
+        reject(new Error(`Cloudinary lỗi ${xhr.status}: ${xhr.responseText}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Mất kết nối khi upload video lên Cloudinary."));
+    xhr.send(formData);
   });
 }
 
@@ -398,49 +352,33 @@ export default function ChamCong() {
     }
   };
 
-  const handleCheckInVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCheckInVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 100 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
+    if (file.size > 500 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 500MB.");
       e.target.value = "";
       return;
     }
     e.target.value = "";
-    const mb = file.size / (1024 * 1024);
-    const skipCompress = mb < 5;
-    const estMsg = skipCompress
-      ? "Đang xử lý video check-in..."
-      : `Đang nén video check-in về 480p... (~${Math.ceil(mb / 15)} phút)`;
-    setCompressingMsg(estMsg);
-    setCompressing(true);
-    const compressed = await compressVideo(file);
-    setCompressing(false);
-    setCheckInVideoBlob(compressed);
-    setCheckInVideoPreview(URL.createObjectURL(compressed));
+    // Lưu file gốc — upload thẳng lên Cloudinary khi submit, không cần nén trước
+    setCheckInVideoBlob(file);
+    setCheckInVideoPreview(URL.createObjectURL(file));
     setUploadStep(2);
   };
 
-  const handleCheckOutVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCheckOutVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 100 * 1024 * 1024) {
-      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 100MB.");
+    if (file.size > 500 * 1024 * 1024) {
+      showToast("error", "Video quá lớn. Vui lòng chọn video dưới 500MB.");
       e.target.value = "";
       return;
     }
     e.target.value = "";
-    const mb = file.size / (1024 * 1024);
-    const skipCompress = mb < 5;
-    const estMsg = skipCompress
-      ? "Đang xử lý video check-out..."
-      : `Đang nén video check-out về 480p... (~${Math.ceil(mb / 15)} phút)`;
-    setCompressingMsg(estMsg);
-    setCompressing(true);
-    const compressed = await compressVideo(file);
-    setCompressing(false);
-    setCheckOutVideoBlob(compressed);
-    setCheckOutVideoPreview(URL.createObjectURL(compressed));
+    // Lưu file gốc — upload thẳng lên Cloudinary khi submit, không cần nén trước
+    setCheckOutVideoBlob(file);
+    setCheckOutVideoPreview(URL.createObjectURL(file));
     setUploadStep("done");
     setTimeout(() => setUploadPopupOpen(false), 800);
   };
@@ -522,24 +460,15 @@ export default function ChamCong() {
       );
     };
 
-    const uploadVideo = async (blob: Blob, actionType: "check-in" | "check-out") => {
-      const ext = blob.type.split("/")[1]?.split(";")[0] || "mp4";
-      const fileName = `${eid}_${workDate}_${actionType}_${ts}_video.${ext}`;
+    const uploadVideo = async (file: Blob, actionType: "check-in" | "check-out") => {
       setUploadPercent(0);
       return retryUpload(
         async () => {
-          const { error } = await supabase.storage
-            .from("checkin_photos")
-            .upload(fileName, blob, {
-              contentType: blob.type,
-              // @ts-expect-error supabase-js v2 storage supports onUploadProgress
-              onUploadProgress: (ev: { loaded: number; total: number }) => {
-                setUploadPercent(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
-              },
-            });
-          if (error) throw new Error(`Lỗi upload video ${actionType}: ` + error.message);
-          setUploadPercent(100);
-          return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+          const url = await uploadVideoToCloudinary(
+            file instanceof File ? file : new File([file], `video_${actionType}.mp4`, { type: file.type }),
+            (pct) => setUploadPercent(pct)
+          );
+          return url;
         },
         3,
         (attempt) => { setUploadPercent(0); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
@@ -1020,7 +949,7 @@ export default function ChamCong() {
                       <div className="w-full py-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 flex flex-col items-center gap-2 hover:bg-violet-100 transition">
                         <Video size={24} />
                         <span className="text-sm font-semibold">Chọn video check-in</span>
-                        <span className="text-xs text-violet-500">MP4, MOV, AVI, WebM… tối đa 100MB</span>
+                        <span className="text-xs text-violet-500">MP4, MOV, AVI, WebM… tối đa 500MB</span>
                       </div>
                     </label>
                   )}
@@ -1070,7 +999,7 @@ export default function ChamCong() {
                       <div className="w-full py-4 rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 text-violet-700 flex flex-col items-center gap-2 hover:bg-violet-100 transition">
                         <Video size={24} />
                         <span className="text-sm font-semibold">Chọn video check-out</span>
-                        <span className="text-xs text-violet-500">MP4, MOV, AVI, WebM… tối đa 100MB</span>
+                        <span className="text-xs text-violet-500">MP4, MOV, AVI, WebM… tối đa 500MB</span>
                       </div>
                     </label>
                   )}
