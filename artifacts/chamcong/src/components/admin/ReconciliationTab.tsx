@@ -155,8 +155,14 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       if (r.action_type === "check-in") g.checkIn = r;
       else g.checkOut = r;
     }
-    // Sắp xếp theo ngày mới nhất trước
-    setGroups(Array.from(map.values()).sort((a, b) => b.work_date.localeCompare(a.work_date) || a.employee_id.localeCompare(b.employee_id)));
+    // Sắp xếp: ngày mới nhất trước, cùng ngày thì ai gửi gần nhất lên trước
+    setGroups(Array.from(map.values()).sort((a, b) => {
+      const dateCmp = b.work_date.localeCompare(a.work_date);
+      if (dateCmp !== 0) return dateCmp;
+      const aAt = a.checkOut?.created_at ?? a.checkIn?.created_at ?? "";
+      const bAt = b.checkOut?.created_at ?? b.checkIn?.created_at ?? "";
+      return bAt.localeCompare(aAt);
+    }));
 
     // Load trạng thái đã đối soát — savedIds lưu dạng "employee_id_attendance_date"
     Promise.all([

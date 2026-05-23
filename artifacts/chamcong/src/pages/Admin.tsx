@@ -32,6 +32,7 @@ type GroupedEmployee = {
   work_date_end?: string | null;
   shift: string;
   records: AttendanceRecord[];
+  latestAt?: string;
 };
 
 // ──────────────────────────────────────────────────────
@@ -39,16 +40,24 @@ type GroupedEmployee = {
 // ──────────────────────────────────────────────────────
 function groupByEmployee(records: AttendanceRecord[]): GroupedEmployee[] {
   const map = new Map<string, GroupedEmployee>();
+  // records đã được Supabase sort created_at DESC nên record đầu tiên của mỗi group = mới nhất
   for (const r of records) {
     const key = `${r.employee_id}__${r.work_date}`;
     if (!map.has(key)) {
-      map.set(key, { employee_id: r.employee_id, full_name: r.full_name, work_date: r.work_date, work_date_end: r.work_date_end, shift: r.shift, records: [] });
+      map.set(key, { employee_id: r.employee_id, full_name: r.full_name, work_date: r.work_date, work_date_end: r.work_date_end, shift: r.shift, records: [], latestAt: r.created_at });
     }
-    // Giữ work_date_end nếu record có
-    if (r.work_date_end) map.get(key)!.work_date_end = r.work_date_end;
-    map.get(key)!.records.push(r);
+    const g = map.get(key)!;
+    if (r.work_date_end) g.work_date_end = r.work_date_end;
+    // Cập nhật thời gian mới nhất của group
+    if (r.created_at > (g.latestAt ?? "")) g.latestAt = r.created_at;
+    g.records.push(r);
   }
-  return Array.from(map.values()).sort((a, b) => b.work_date.localeCompare(a.work_date));
+  return Array.from(map.values()).sort((a, b) =>
+    // Ưu tiên 1: ngày làm mới nhất trước
+    b.work_date.localeCompare(a.work_date) ||
+    // Ưu tiên 2: cùng ngày thì ai gửi gần nhất lên trước
+    (b.latestAt ?? "").localeCompare(a.latestAt ?? "")
+  );
 }
 
 function todayStr() {
