@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { getOptimizedUrl } from "@/utils/cloudinaryUtils";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, JobApplication, Shift } from "@/lib/supabase";
 import { Link } from "wouter";
@@ -439,7 +440,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                             {images.map((img, i) => (
                               <button key={i} onClick={() => { setModalImage(img.url); setModalImageLabel(`Ảnh ${img.type} — ${g.full_name}`); setModalImageZoomed(false); }}
                                 className="relative w-8 h-8 rounded-lg overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition group">
-                                <img src={img.url} alt="ảnh" className="w-full h-full object-cover" />
+                                <img src={getOptimizedUrl(img.url)} alt="ảnh" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                                   <Search size={10} className="text-white" />
                                 </div>
@@ -516,7 +517,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
             onClick={e => { e.stopPropagation(); setModalImageZoomed(z => !z); }}
           >
             <img
-              src={modalImage}
+              src={getOptimizedUrl(modalImage)}
               alt="Ảnh chấm công"
               className={`rounded-xl shadow-2xl transition-all duration-200 ${modalImageZoomed ? "max-w-none w-auto" : "max-w-full max-h-[80vh] object-contain"}`}
             />
@@ -549,7 +550,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
           </div>
           <div className="w-full max-w-4xl px-4 pt-14 pb-10" onClick={e => e.stopPropagation()}>
             <video
-              src={modalVideo}
+              src={getOptimizedUrl(modalVideo)}
               controls
               autoPlay
               className="w-full max-h-[80vh] rounded-2xl shadow-2xl bg-black"
@@ -822,7 +823,7 @@ function JobApplicationsTab() {
                           className="relative rounded-xl overflow-hidden border border-border bg-muted/20 cursor-zoom-in"
                           onClick={() => setModalImageZoom(true)}
                         >
-                          <img src={src} alt={label} className="w-full object-contain max-h-80" />
+                          <img src={getOptimizedUrl(src)} alt={label} className="w-full object-contain max-h-80" />
                           <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1">
                             <Search size={11} /> Nhấn để phóng to
                           </div>
@@ -891,7 +892,7 @@ function JobApplicationsTab() {
                   <X size={20} />
                 </button>
                 <img
-                  src={src}
+                  src={getOptimizedUrl(src)}
                   alt="CCCD phóng to"
                   className="max-w-full max-h-full rounded-xl shadow-2xl object-contain"
                   onClick={e => e.stopPropagation()}

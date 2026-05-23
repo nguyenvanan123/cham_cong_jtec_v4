@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { getOptimizedUrl } from "@/utils/cloudinaryUtils";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Shift, Reconciliation } from "@/lib/supabase";
 import { detectDayType, getDayOfWeekShort, getAutoReason } from "@/lib/vn-holidays";
@@ -604,7 +605,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                     <p className="text-xs font-semibold text-muted-foreground">{label}</p>
                     {img ? (
                       <div className="relative group cursor-pointer" onClick={() => setLightboxImg(img)}>
-                        <img src={img} alt={label} className={`w-full aspect-video object-cover rounded-xl border-2 ${imgBorder}`} />
+                        <img src={getOptimizedUrl(img)} alt={label} className={`w-full aspect-video object-cover rounded-xl border-2 ${imgBorder}`} />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center">
                           <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
@@ -616,7 +617,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                     )}
                     {vid ? (
                       <div className="relative group cursor-pointer" onClick={() => setLightboxVideo(vid)}>
-                        <video src={vid} className={`w-full aspect-video object-cover rounded-xl border-2 ${vidBorder}`} muted playsInline />
+                        <video src={getOptimizedUrl(vid)} className={`w-full aspect-video object-cover rounded-xl border-2 ${vidBorder}`} muted playsInline />
                         <div className="absolute inset-0 bg-black/40 group-hover:bg-black/60 rounded-xl transition-all flex items-center justify-center">
                           <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
                             <Play size={14} className="text-gray-800 ml-0.5" />
@@ -879,7 +880,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
             <X size={20} className="text-white" />
           </button>
           <img
-            src={lightboxImg}
+            src={getOptimizedUrl(lightboxImg)}
             alt="Phóng to"
             className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
             onClick={e => e.stopPropagation()}
@@ -906,7 +907,7 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
             </div>
           </div>
           <video
-            src={lightboxVideo}
+            src={getOptimizedUrl(lightboxVideo)}
             controls
             autoPlay
             className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"

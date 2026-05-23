@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { getOptimizedUrl } from "@/utils/cloudinaryUtils";
 import { supabase } from "@/lib/supabase";
 import type { Reconciliation } from "@/lib/supabase";
 import { Download, RefreshCw, FileSpreadsheet, X, Trash2, Search, Play } from "lucide-react";
@@ -434,7 +435,7 @@ export function ExportTab() {
             </div>
           </div>
           <video
-            src={modalVideo}
+            src={getOptimizedUrl(modalVideo)}
             controls
             autoPlay
             className="max-w-full max-h-[85vh] rounded-xl shadow-2xl"
