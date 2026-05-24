@@ -47,11 +47,15 @@ async function retryUpload<T>(
 const CLOUDINARY_CLOUD = "dtvqq32lt";
 const CLOUDINARY_PRESET = "chamcong_unsigned";
 
-// Upload ảnh lên Cloudinary CDN (sau khi đã nén client-side)
-// onProgress: callback nhận 0–100
-function uploadPhotoToCloudinary(
+type UploadCallbacks = {
+  onProgress: (pct: number) => void;
+  onSpeed?: (mbps: number) => void;
+};
+
+function cloudinaryUpload(
   file: File,
-  onProgress: (pct: number) => void
+  endpoint: string,
+  { onProgress, onSpeed }: UploadCallbacks
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
@@ -59,11 +63,16 @@ function uploadPhotoToCloudinary(
     formData.append("upload_preset", CLOUDINARY_PRESET);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+    xhr.open("POST", endpoint);
 
+    const startTime = Date.now();
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
         onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        if (elapsedSec > 0.2 && onSpeed) {
+          onSpeed(parseFloat(((e.loaded / 1024 / 1024) / elapsedSec).toFixed(2)));
+        }
       }
     };
 
@@ -71,50 +80,24 @@ function uploadPhotoToCloudinary(
       if (xhr.status >= 200 && xhr.status < 300) {
         const data = JSON.parse(xhr.responseText);
         onProgress(100);
+        onSpeed?.(0);
         resolve(data.secure_url as string);
       } else {
         reject(new Error(`Cloudinary lỗi ${xhr.status}: ${xhr.responseText}`));
       }
     };
 
-    xhr.onerror = () => reject(new Error("Mất kết nối khi upload ảnh lên Cloudinary."));
+    xhr.onerror = () => reject(new Error("Mất kết nối khi upload lên Cloudinary."));
     xhr.send(formData);
   });
 }
 
-// Upload video thẳng lên Cloudinary CDN (không qua backend, không nén CPU)
-// onProgress: callback nhận 0–100
-function uploadVideoToCloudinary(
-  file: File,
-  onProgress: (pct: number) => void
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", CLOUDINARY_PRESET);
+function uploadPhotoToCloudinary(file: File, cbs: UploadCallbacks): Promise<string> {
+  return cloudinaryUpload(file, `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, cbs);
+}
 
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/video/upload`);
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const data = JSON.parse(xhr.responseText);
-        onProgress(100);
-        resolve(data.secure_url as string);
-      } else {
-        reject(new Error(`Cloudinary lỗi ${xhr.status}: ${xhr.responseText}`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error("Mất kết nối khi upload video lên Cloudinary."));
-    xhr.send(formData);
-  });
+function uploadVideoToCloudinary(file: File, cbs: UploadCallbacks): Promise<string> {
+  return cloudinaryUpload(file, `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/video/upload`, cbs);
 }
 
 function today() {
@@ -166,6 +149,7 @@ export default function ChamCong() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const [uploadSpeed, setUploadSpeed] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Cooldown 5 giây để chống spam form
   const [submitCooldown, setSubmitCooldown] = useState(false);
@@ -472,32 +456,38 @@ export default function ChamCong() {
     const ts = Date.now();
     const eid = employeeId.trim();
 
+    const uploadCbs: UploadCallbacks = {
+      onProgress: (pct) => setUploadPercent(pct),
+      onSpeed: (mbps) => setUploadSpeed(mbps > 0 ? mbps : null),
+    };
+
     const uploadPhoto = async (blob: Blob, actionType: "check-in" | "check-out") => {
       setUploadPercent(0);
+      setUploadSpeed(null);
       return retryUpload(
         async () => {
           const file = blob instanceof File
             ? blob
             : new File([blob], `${eid}_${workDate}_${actionType}_${ts}.jpg`, { type: "image/jpeg" });
-          return await uploadPhotoToCloudinary(file, (pct) => setUploadPercent(pct));
+          return await uploadPhotoToCloudinary(file, uploadCbs);
         },
         3,
-        (attempt) => { setUploadPercent(0); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
+        (attempt) => { setUploadPercent(0); setUploadSpeed(null); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
       );
     };
 
     const uploadVideo = async (file: Blob, actionType: "check-in" | "check-out") => {
       setUploadPercent(0);
+      setUploadSpeed(null);
       return retryUpload(
         async () => {
-          const url = await uploadVideoToCloudinary(
+          return await uploadVideoToCloudinary(
             file instanceof File ? file : new File([file], `video_${actionType}.mp4`, { type: file.type }),
-            (pct) => setUploadPercent(pct)
+            uploadCbs
           );
-          return url;
         },
         3,
-        (attempt) => { setUploadPercent(0); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
+        (attempt) => { setUploadPercent(0); setUploadSpeed(null); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
       );
     };
 
@@ -597,6 +587,7 @@ export default function ChamCong() {
       setSubmitting(false);
       setUploadProgress(null);
       setUploadPercent(null);
+      setUploadSpeed(null);
     }
   };
 
@@ -866,26 +857,47 @@ export default function ChamCong() {
             type="submit"
             data-testid="btn-submit"
             disabled={submitting || submitCooldown || !mediaReady || !isOnline}
-            className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex flex-col items-center justify-center gap-1"
+            className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-base shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex flex-col items-center justify-center gap-2 min-h-[64px]"
           >
             {submitting ? (
-              <>
-                <span className="flex items-center gap-2">
-                  <Loader2 size={18} className="animate-spin" />
-                  {uploadPercent !== null ? `Đang upload... ${uploadPercent}%` : "Đang gửi..."}
-                </span>
+              <div className="w-full px-1 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 size={14} className="animate-spin flex-shrink-0" />
+                    <span className="truncate">
+                      {uploadProgress ?? (uploadPercent !== null ? "Đang upload..." : "Đang gửi...")}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 flex-shrink-0 ml-2 tabular-nums">
+                    {uploadPercent !== null && (
+                      <span className="font-bold">{uploadPercent}%</span>
+                    )}
+                    {uploadSpeed !== null && uploadSpeed > 0 && (
+                      <span className="text-white/70 text-xs font-normal">
+                        {uploadSpeed >= 1
+                          ? `${uploadSpeed.toFixed(1)} MB/s`
+                          : `${(uploadSpeed * 1024).toFixed(0)} KB/s`}
+                      </span>
+                    )}
+                  </span>
+                </div>
                 {uploadPercent !== null && (
-                  <div className="w-full max-w-xs h-1.5 bg-white/30 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-white rounded-full transition-all duration-200"
-                      style={{ width: `${uploadPercent}%` }}
+                      className="h-full rounded-full transition-all duration-300 ease-out"
+                      style={{
+                        width: `${uploadPercent}%`,
+                        background: uploadPercent === 100
+                          ? "rgba(255,255,255,0.95)"
+                          : "linear-gradient(90deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,1) 100%)",
+                        boxShadow: uploadPercent > 0 && uploadPercent < 100
+                          ? "0 0 8px rgba(255,255,255,0.6)"
+                          : "none",
+                      }}
                     />
                   </div>
                 )}
-                {uploadProgress && uploadPercent === null && (
-                  <span className="text-xs font-normal opacity-80">{uploadProgress}</span>
-                )}
-              </>
+              </div>
             ) : submitCooldown ? (
               <span className="flex items-center gap-2">
                 <Loader2 size={18} className="animate-spin" />
