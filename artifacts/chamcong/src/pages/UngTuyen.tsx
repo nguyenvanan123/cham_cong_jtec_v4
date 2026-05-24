@@ -7,6 +7,32 @@ import {
   User, CreditCard, Banknote, Users, ImagePlus, X, Phone, Loader2
 } from "lucide-react";
 
+const CLOUDINARY_CLOUD = "dtvqq32lt";
+const CLOUDINARY_PRESET = "chamcong_unsigned";
+
+function uploadImageToCloudinary(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText);
+        resolve(data.secure_url as string);
+      } else {
+        reject(new Error(`Cloudinary lỗi ${xhr.status}: ${xhr.responseText}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Mất kết nối khi upload ảnh lên Cloudinary."));
+    xhr.send(formData);
+  });
+}
+
 const CCCD_COMPRESS_OPTIONS = {
   maxSizeMB: 3.0,
   maxWidthOrHeight: 2560,
@@ -195,24 +221,24 @@ export default function UngTuyen() {
 
     setSubmitting(true);
 
-    const frontName = `${Date.now()}_front_${frontFile.name}`;
-    const { error: frontErr } = await supabase.storage
-      .from("application_docs")
-      .upload(frontName, frontFile, { contentType: frontFile.type });
-    if (frontErr) {
-      setError(`[Storage - ảnh trước] ${frontErr.message}`);
-      setShowSql(true);
+    let frontUrl = "";
+    let backUrl = "";
+    try {
+      frontUrl = await uploadImageToCloudinary(
+        frontFile instanceof File ? frontFile : new File([frontFile], `cccd_front_${Date.now()}.jpg`, { type: "image/jpeg" })
+      );
+    } catch (err: unknown) {
+      setError(`[Upload ảnh CCCD mặt trước] ${err instanceof Error ? err.message : "Lỗi không xác định"}`);
       setSubmitting(false);
       return;
     }
 
-    const backName = `${Date.now()}_back_${backFile.name}`;
-    const { error: backErr } = await supabase.storage
-      .from("application_docs")
-      .upload(backName, backFile, { contentType: backFile.type });
-    if (backErr) {
-      setError(`[Storage - ảnh sau] ${backErr.message}`);
-      setShowSql(true);
+    try {
+      backUrl = await uploadImageToCloudinary(
+        backFile instanceof File ? backFile : new File([backFile], `cccd_back_${Date.now()}.jpg`, { type: "image/jpeg" })
+      );
+    } catch (err: unknown) {
+      setError(`[Upload ảnh CCCD mặt sau] ${err instanceof Error ? err.message : "Lỗi không xác định"}`);
       setSubmitting(false);
       return;
     }
@@ -226,8 +252,8 @@ export default function UngTuyen() {
         referrer_bank_account: cleanReferrerBankAccount,
         referrer_bank_name: cleanReferrerBankName,
         bank_account: "",
-        cccd_front_url: frontName,
-        cccd_back_url: backName,
+        cccd_front_url: frontUrl,
+        cccd_back_url: backUrl,
         status: "pending",
       })
     );

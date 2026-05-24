@@ -47,6 +47,41 @@ async function retryUpload<T>(
 const CLOUDINARY_CLOUD = "dtvqq32lt";
 const CLOUDINARY_PRESET = "chamcong_unsigned";
 
+// Upload ảnh lên Cloudinary CDN (sau khi đã nén client-side)
+// onProgress: callback nhận 0–100
+function uploadPhotoToCloudinary(
+  file: File,
+  onProgress: (pct: number) => void
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText);
+        onProgress(100);
+        resolve(data.secure_url as string);
+      } else {
+        reject(new Error(`Cloudinary lỗi ${xhr.status}: ${xhr.responseText}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Mất kết nối khi upload ảnh lên Cloudinary."));
+    xhr.send(formData);
+  });
+}
+
 // Upload video thẳng lên Cloudinary CDN (không qua backend, không nén CPU)
 // onProgress: callback nhận 0–100
 function uploadVideoToCloudinary(
@@ -438,22 +473,13 @@ export default function ChamCong() {
     const eid = employeeId.trim();
 
     const uploadPhoto = async (blob: Blob, actionType: "check-in" | "check-out") => {
-      const fileName = `${eid}_${workDate}_${actionType}_${ts}.jpg`;
       setUploadPercent(0);
       return retryUpload(
         async () => {
-          const { error } = await supabase.storage
-            .from("checkin_photos")
-            .upload(fileName, blob, {
-              contentType: "image/jpeg",
-              // @ts-expect-error supabase-js v2 storage supports onUploadProgress
-              onUploadProgress: (ev: { loaded: number; total: number }) => {
-                setUploadPercent(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
-              },
-            });
-          if (error) throw new Error(`Lỗi upload ảnh ${actionType}: ` + error.message);
-          setUploadPercent(100);
-          return supabase.storage.from("checkin_photos").getPublicUrl(fileName).data.publicUrl;
+          const file = blob instanceof File
+            ? blob
+            : new File([blob], `${eid}_${workDate}_${actionType}_${ts}.jpg`, { type: "image/jpeg" });
+          return await uploadPhotoToCloudinary(file, (pct) => setUploadPercent(pct));
         },
         3,
         (attempt) => { setUploadPercent(0); setUploadProgress(`Kết nối chậm, thử lại lần ${attempt}...`); }
