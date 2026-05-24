@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "_6ncv1Tw4aG7idiJ-DFqs"
+uri = "file://HUONG_DAN_TOAN_BO.md"
+type = "text"
+title = "Hướng dẫn Toàn bộ — JTEC Chấm Công (Cloudinary + Supabase + Deploy)"

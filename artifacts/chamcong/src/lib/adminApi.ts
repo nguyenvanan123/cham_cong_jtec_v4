@@ -1,4 +1,8 @@
-const API_BASE = "/api/admin";
+// Trong production: đặt VITE_API_URL=https://your-api-server.railway.app
+// Trong development: để trống, Vite sẽ proxy /api → localhost:8080
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api/admin`
+  : "/api/admin";
 const TOKEN_KEY = "admin_api_token";
 
 export function getAdminToken(): string {
