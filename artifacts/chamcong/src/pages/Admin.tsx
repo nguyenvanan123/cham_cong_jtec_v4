@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getOptimizedUrl } from "@/utils/cloudinaryUtils";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, JobApplication, Shift } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import { Link } from "wouter";
 import {
   Camera, Search, X, ChevronLeft, ChevronRight, ChevronDown,
@@ -311,11 +312,11 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
     setDeletingKey(key);
     setDeleteError(null);
     const ids = g.records.map(r => r.id);
-    const { error } = await supabase.from("attendance").delete().in("id", ids);
-    if (error) {
-      setDeleteError("Không thể xóa — bảng 'attendance' đang bị RLS chặn. Chạy SQL sau trong Supabase: ALTER TABLE attendance DISABLE ROW LEVEL SECURITY;");
-    } else {
+    try {
+      await adminApi.deleteAttendance(ids);
       onRefresh();
+    } catch (err) {
+      setDeleteError(`Không thể xóa: ${err instanceof Error ? err.message : String(err)}`);
     }
     setDeletingKey(null);
   };
@@ -607,14 +608,20 @@ function JobApplicationsTab() {
   };
 
   const handleStatusChange = async (id: string, status: string) => {
-    await supabase.from("job_applications").update({ status }).eq("id", id);
+    try {
+      await adminApi.updateJobApplication(id, { status });
+    } catch {}
     setApps(prev => prev.map(a => a.id === id ? { ...a, status } : a));
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Xóa đơn ứng tuyển này?")) return;
-    await supabase.from("job_applications").delete().eq("id", id);
-    setApps(prev => prev.filter(a => a.id !== id));
+    try {
+      await adminApi.deleteJobApplication(id);
+      setApps(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      alert(`Lỗi xóa: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const filtered = apps.filter(a => {
@@ -991,7 +998,7 @@ function SettingsTab() {
     }
     setSavingPw(true);
     const hashedNew = await sha256(newPassword);
-    await supabase.from("configs").upsert({ key: "admin_password", value: hashedNew }, { onConflict: "key" });
+    await adminApi.upsertConfig("admin_password", hashedNew);
     setMsgPw({ type: "ok", text: "Đổi mật khẩu thành công! Mật khẩu đã được mã hoá SHA-256." });
     setAdminPassword(newPassword); setNewPassword(""); setConfirmPassword("");
     setSavingPw(false);
@@ -1001,18 +1008,21 @@ function SettingsTab() {
   const handleToggleBanner = async () => {
     const next = bannerStatus === "on" ? "off" : "on";
     setBannerStatus(next);
-    const { error } = await supabase.from("configs").upsert({ key: "banner_status", value: next }, { onConflict: "key" });
-    if (error) alert(`Lỗi: ${error.message}`);
+    try {
+      await adminApi.upsertConfig("banner_status", next);
+    } catch (err) {
+      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingBanner(true);
-    const { error } = await supabase.from("configs").upsert({ key: "banner_url", value: bannerUrl.trim() }, { onConflict: "key" });
-    if (error) {
-      setMsgBanner({ type: "err", text: `Lỗi lưu: ${error.message}. Hãy chạy SQL Setup trong Supabase.` });
-    } else {
+    try {
+      await adminApi.upsertConfig("banner_url", bannerUrl.trim());
       setMsgBanner({ type: "ok", text: "Lưu banner thành công!" });
+    } catch (err) {
+      setMsgBanner({ type: "err", text: `Lỗi lưu: ${err instanceof Error ? err.message : String(err)}. Hãy chạy SQL Setup trong Supabase.` });
     }
     setSavingBanner(false);
     setTimeout(() => setMsgBanner(null), 6000);
@@ -1021,23 +1031,25 @@ function SettingsTab() {
   const handleTogglePopup = async () => {
     const next = popupStatus === "on" ? "off" : "on";
     setPopupStatus(next);
-    const { error } = await supabase.from("configs").upsert({ key: "popup_status", value: next }, { onConflict: "key" });
-    if (error) alert(`Lỗi lưu trạng thái popup: ${error.message}`);
+    try {
+      await adminApi.upsertConfig("popup_status", next);
+    } catch (err) {
+      alert(`Lỗi lưu trạng thái popup: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleSavePopup = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingPopup(true);
-    const results = await Promise.all([
-      supabase.from("configs").upsert({ key: "popup_title", value: popupTitle }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "popup_content", value: popupContent }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "recruitment_link", value: recruitmentLink }, { onConflict: "key" }),
-    ]);
-    const err = results.find(r => r.error)?.error;
-    if (err) {
-      setMsgPopup({ type: "err", text: `Lỗi lưu: ${err.message}. Hãy chạy SQL Setup trong Supabase.` });
-    } else {
+    try {
+      await adminApi.upsertConfigs([
+        { key: "popup_title", value: popupTitle },
+        { key: "popup_content", value: popupContent },
+        { key: "recruitment_link", value: recruitmentLink },
+      ]);
       setMsgPopup({ type: "ok", text: "Lưu cài đặt popup thành công!" });
+    } catch (err) {
+      setMsgPopup({ type: "err", text: `Lỗi lưu: ${err instanceof Error ? err.message : String(err)}. Hãy chạy SQL Setup trong Supabase.` });
     }
     setSavingPopup(false);
     setTimeout(() => setMsgPopup(null), 6000);
@@ -1046,29 +1058,34 @@ function SettingsTab() {
   const handleToggleAffiliate = async () => {
     const next = affiliateStatus === "on" ? "off" : "on";
     setAffiliateStatus(next);
-    const { error } = await supabase.from("configs").upsert({ key: "affiliate_status", value: next }, { onConflict: "key" });
-    if (error) alert(`Lỗi: ${error.message}`);
+    try {
+      await adminApi.upsertConfig("affiliate_status", next);
+    } catch (err) {
+      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleToggleAffiliatePopup = async () => {
     const next = affiliateShowPopup === "on" ? "off" : "on";
     setAffiliateShowPopup(next);
-    const { error } = await supabase.from("configs").upsert({ key: "affiliate_show_popup", value: next }, { onConflict: "key" });
-    if (error) alert(`Lỗi: ${error.message}`);
+    try {
+      await adminApi.upsertConfig("affiliate_show_popup", next);
+    } catch (err) {
+      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleSaveAffiliate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingAffiliate(true);
-    const results = await Promise.all([
-      supabase.from("configs").upsert({ key: "shopee_link", value: shopeeLink }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "shopee_delay", value: shopeeDelay }, { onConflict: "key" }),
-    ]);
-    const err = results.find(r => r.error)?.error;
-    if (err) {
-      setMsgAffiliate({ type: "err", text: `Lỗi lưu: ${err.message}. Hãy chạy SQL Setup trong Supabase.` });
-    } else {
+    try {
+      await adminApi.upsertConfigs([
+        { key: "shopee_link", value: shopeeLink },
+        { key: "shopee_delay", value: shopeeDelay },
+      ]);
       setMsgAffiliate({ type: "ok", text: "Lưu cài đặt Affiliate thành công!" });
+    } catch (err) {
+      setMsgAffiliate({ type: "err", text: `Lỗi lưu: ${err instanceof Error ? err.message : String(err)}. Hãy chạy SQL Setup trong Supabase.` });
     }
     setSavingAffiliate(false);
     setTimeout(() => setMsgAffiliate(null), 6000);
@@ -1077,29 +1094,34 @@ function SettingsTab() {
   const handleToggleUngTuyenAffiliate = async () => {
     const next = ungTuyenAffiliateStatus === "on" ? "off" : "on";
     setUngTuyenAffiliateStatus(next);
-    const { error } = await supabase.from("configs").upsert({ key: "ung_tuyen_affiliate_status", value: next }, { onConflict: "key" });
-    if (error) alert(`Lỗi: ${error.message}`);
+    try {
+      await adminApi.upsertConfig("ung_tuyen_affiliate_status", next);
+    } catch (err) {
+      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleToggleUngTuyenAffiliatePopup = async () => {
     const next = ungTuyenAffiliateShowPopup === "on" ? "off" : "on";
     setUngTuyenAffiliateShowPopup(next);
-    const { error } = await supabase.from("configs").upsert({ key: "ung_tuyen_affiliate_show_popup", value: next }, { onConflict: "key" });
-    if (error) alert(`Lỗi: ${error.message}`);
+    try {
+      await adminApi.upsertConfig("ung_tuyen_affiliate_show_popup", next);
+    } catch (err) {
+      alert(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleSaveUngTuyenAffiliate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingUngTuyenAffiliate(true);
-    const results = await Promise.all([
-      supabase.from("configs").upsert({ key: "ung_tuyen_shopee_link", value: ungTuyenShopeeLink }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "ung_tuyen_shopee_delay", value: ungTuyenShopeeDelay }, { onConflict: "key" }),
-    ]);
-    const err = results.find(r => r.error)?.error;
-    if (err) {
-      setMsgUngTuyenAffiliate({ type: "err", text: `Lỗi lưu: ${err.message}` });
-    } else {
+    try {
+      await adminApi.upsertConfigs([
+        { key: "ung_tuyen_shopee_link", value: ungTuyenShopeeLink },
+        { key: "ung_tuyen_shopee_delay", value: ungTuyenShopeeDelay },
+      ]);
       setMsgUngTuyenAffiliate({ type: "ok", text: "Lưu cài đặt thành công!" });
+    } catch (err) {
+      setMsgUngTuyenAffiliate({ type: "err", text: `Lỗi lưu: ${err instanceof Error ? err.message : String(err)}` });
     }
     setSavingUngTuyenAffiliate(false);
     setTimeout(() => setMsgUngTuyenAffiliate(null), 6000);
@@ -1108,17 +1130,16 @@ function SettingsTab() {
   const handleSaveHours = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingHours(true);
-    const results = await Promise.all([
-      supabase.from("configs").upsert({ key: "attendance_open_time", value: attendanceOpenTime }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "attendance_close_time", value: attendanceCloseTime }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "attendance_closed_message", value: attendanceClosedMessage }, { onConflict: "key" }),
-      supabase.from("configs").upsert({ key: "zalo_admin_link", value: zaloAdminLink }, { onConflict: "key" }),
-    ]);
-    const err = results.find(r => r.error)?.error;
-    if (err) {
-      setMsgHours({ type: "err", text: `Lỗi lưu: ${err.message}. Hãy chạy SQL Setup trong Supabase.` });
-    } else {
+    try {
+      await adminApi.upsertConfigs([
+        { key: "attendance_open_time", value: attendanceOpenTime },
+        { key: "attendance_close_time", value: attendanceCloseTime },
+        { key: "attendance_closed_message", value: attendanceClosedMessage },
+        { key: "zalo_admin_link", value: zaloAdminLink },
+      ]);
       setMsgHours({ type: "ok", text: "Lưu cài đặt giờ thành công!" });
+    } catch (err) {
+      setMsgHours({ type: "err", text: `Lỗi lưu: ${err instanceof Error ? err.message : String(err)}. Hãy chạy SQL Setup trong Supabase.` });
     }
     setSavingHours(false);
     setTimeout(() => setMsgHours(null), 6000);
@@ -1629,19 +1650,12 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     if (rate.lockedUntil > Date.now()) return;
     setLoading(true);
     setError("");
-    const { data } = await supabase.from("configs").select("value").eq("key", "admin_password").single();
-    const stored = data?.value ?? "";
-    const hashed = await sha256(password.trim());
-    const isHashMatch = stored === hashed;
-    const isPlainMatch = stored === password.trim() && !isHashMatch;
-    if (isHashMatch || isPlainMatch) {
-      if (isPlainMatch) {
-        await supabase.from("configs").upsert({ key: "admin_password", value: hashed }, { onConflict: "key" });
-      }
+    try {
+      await adminApi.login(password.trim());
       resetRateLimit();
       setSession();
       onLogin();
-    } else {
+    } catch {
       const { attempts, lockedUntil: lu } = recordFailedAttempt();
       if (lu > Date.now()) {
         setLockedUntil(lu);

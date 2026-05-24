@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getOptimizedUrl } from "@/utils/cloudinaryUtils";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Shift, Reconciliation } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import { detectDayType, getDayOfWeekShort, getAutoReason } from "@/lib/vn-holidays";
 import { X, CheckCircle, Clock, Banknote, CalendarCheck, RefreshCw, Search, Save, AlertCircle, ZoomIn, Play } from "lucide-react";
 
@@ -384,51 +385,24 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
       work_date_end: isOvernightShift ? workDateEnd : "",
     };
 
-    // Cố gắng lưu đầy đủ (bao gồm employee_type)
+    // Lưu qua backend API (service role key — bypass RLS)
     const recWithType = { ...baseRec, employee_type: employeeType };
-    let { error } = await supabase.from("reconciliations").upsert(recWithType, { onConflict: "employee_id,work_date" });
-
-    // Retry 1: cột employee_type chưa có trong DB
-    if (error?.message?.includes("employee_type")) {
-      ({ error } = await supabase.from("reconciliations").upsert(baseRec, { onConflict: "employee_id,work_date" }));
-      if (!error) setSaveErrMsg("⚠️ Lưu thành công (trừ cột employee_type). Chạy SQL migration để đầy đủ.");
+    let apiError: string | null = null;
+    try {
+      await adminApi.upsertReconciliation(recWithType as unknown as Record<string, unknown>);
+    } catch (err) {
+      apiError = err instanceof Error ? err.message : String(err);
     }
 
-    // Retry 2: cột mới (day_type, start_date, notes, video) chưa có trong DB
-    if (error?.message?.includes("column") && error.message.includes("does not exist")) {
-      const coreRec = {
-        employee_id: baseRec.employee_id,
-        full_name: baseRec.full_name,
-        work_date: baseRec.work_date,
-        shift_name: baseRec.shift_name,
-        check_in_time: baseRec.check_in_time,
-        check_out_time: baseRec.check_out_time,
-        total_hours: baseRec.total_hours,
-        normal_hours: baseRec.normal_hours,
-        overtime_hours: baseRec.overtime_hours,
-        base_wage: baseRec.base_wage,
-        overtime_pay: baseRec.overtime_pay,
-        bonus: baseRec.bonus,
-        attendance_bonus: baseRec.attendance_bonus,
-        total_wage: baseRec.total_wage,
-        bank_account: baseRec.bank_account,
-        bank_name: baseRec.bank_name,
-        check_in_image: baseRec.check_in_image,
-        check_out_image: baseRec.check_out_image,
-      };
-      ({ error } = await supabase.from("reconciliations").upsert(coreRec, { onConflict: "employee_id,work_date" }));
-      if (!error) setSaveErrMsg("⚠️ Lưu thành công nhưng thiếu một số cột mới. Chạy SQL migration đầy đủ trong Supabase để lưu tất cả các trường.");
-    }
-
-    if (error) {
-      if (error.message.includes("relation") && error.message.includes("does not exist")) {
+    if (apiError) {
+      if (apiError.includes("relation") && apiError.includes("does not exist")) {
         setDbError(true);
         setSaveErrMsg("Bảng 'reconciliations' chưa tồn tại. Chạy SQL bên trên trong Supabase.");
-      } else if (error.code === "42501" || error.message.toLowerCase().includes("rls") || error.message.toLowerCase().includes("policy") || error.message.toLowerCase().includes("permission") || error.message.toLowerCase().includes("row-level")) {
-        setSaveErrMsg("Bị chặn bởi RLS. Chạy: ALTER TABLE reconciliations DISABLE ROW LEVEL SECURITY;");
+      } else if (apiError.toLowerCase().includes("rls") || apiError.toLowerCase().includes("policy") || apiError.toLowerCase().includes("permission")) {
+        setSaveErrMsg("Bị chặn bởi RLS trên backend.");
         setDbError(true);
       } else {
-        setSaveErrMsg("Lỗi lưu: " + error.message);
+        setSaveErrMsg("Lỗi lưu: " + apiError);
       }
     } else {
       // savedIds lưu "employee_id_attendance_date"

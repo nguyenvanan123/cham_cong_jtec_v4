@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getOptimizedUrl } from "@/utils/cloudinaryUtils";
 import { supabase } from "@/lib/supabase";
 import type { Reconciliation } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import { Download, RefreshCw, FileSpreadsheet, X, Trash2, Search, Play } from "lucide-react";
 
 function yesterday() {
@@ -119,9 +120,13 @@ export function ExportTab() {
   const handleDelete = async (id: string) => {
     if (!confirm("Xóa bản đối soát này?")) return;
     setDeleting(id);
-    await supabase.from("reconciliations").delete().eq("id", id);
+    try {
+      await adminApi.deleteReconciliation(id);
+      setRecords(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      alert(`Lỗi xóa: ${err instanceof Error ? err.message : String(err)}`);
+    }
     setDeleting(null);
-    setRecords(prev => prev.filter(r => r.id !== id));
   };
 
   const totalWage = filtered.reduce((sum, r) => sum + r.total_wage, 0);

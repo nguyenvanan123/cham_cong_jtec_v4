@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import {
   Trash2, ChevronLeft, ChevronRight, AlertTriangle,
   RefreshCw, Filter, ShieldAlert, X, CalendarRange, Search,
@@ -335,25 +336,20 @@ export function CleanupTab() {
   const handleDelete = async () => {
     if (!currentOption || targetIds.length === 0) return;
     setDeleting(true);
-
-    const { error } = await Promise.resolve(
-      supabase.from(currentOption.table).delete().in("id", targetIds)
-    );
-
-    setDeleting(false);
-    setShowModal(false);
-
-    if (error) {
-      showToast("error", "Lỗi xóa: " + error.message);
-    } else {
+    try {
+      await adminApi.cleanup(currentOption.table, targetIds);
+      setDeleting(false);
+      setShowModal(false);
       const deletedCount = targetIds.length;
       showToast("success", `Đã xóa ${deletedCount} bản ghi thành công.`);
-
-      // Cập nhật lại danh sách mà không cần fetch lại
       const deletedSet = new Set(targetIds);
       setRows((prev) => prev.filter((r) => !deletedSet.has(r.id as string)));
       setSelectedIds(new Set());
       setPage(1);
+    } catch (err) {
+      setDeleting(false);
+      setShowModal(false);
+      showToast("error", "Lỗi xóa: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 

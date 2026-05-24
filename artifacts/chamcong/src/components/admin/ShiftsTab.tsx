@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Shift } from "@/lib/supabase";
+import { adminApi } from "@/lib/adminApi";
 import { Plus, Pencil, Trash2, Save, X, RefreshCw, Layers, Link2, Copy } from "lucide-react";
 
 type ShiftForm = Omit<Shift, "id" | "created_at">;
@@ -214,32 +215,28 @@ export function ShiftsTab() {
     if (!form.name.trim()) return;
     setSaving(true);
     setSaveError(null);
-    const { error } = editId
-      ? await supabase.from("shifts").update(form).eq("id", editId)
-      : await supabase.from("shifts").insert(form);
-    setSaving(false);
-    if (error) {
-      if (error.message.includes("does not exist")) {
-        setSaveError("Bảng 'shifts' chưa tồn tại. Hãy chạy SQL bên dưới trong Supabase trước.");
-        setDbError(true);
-      } else if (error.code === "42501" || error.message.toLowerCase().includes("rls") || error.message.toLowerCase().includes("policy") || error.message.toLowerCase().includes("permission")) {
-        setSaveError("Bị chặn bởi RLS. Chạy: ALTER TABLE shifts DISABLE ROW LEVEL SECURITY;");
-        setDbError(true);
+    try {
+      if (editId) {
+        await adminApi.updateShift(editId, form as unknown as Record<string, unknown>);
       } else {
-        setSaveError(error.message);
+        await adminApi.insertShift(form as unknown as Record<string, unknown>);
       }
-      return;
+      setModal(false);
+      load();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
     }
-    setModal(false);
-    load();
+    setSaving(false);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Xóa ca này?")) return;
     setDeleting(id);
-    const { error } = await supabase.from("shifts").delete().eq("id", id);
+    try {
+      await adminApi.deleteShift(id);
+      load();
+    } catch {}
     setDeleting(null);
-    if (!error) load();
   };
 
   const f = (n: number) => n.toLocaleString("vi-VN");
