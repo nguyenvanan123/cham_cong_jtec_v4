@@ -3,8 +3,8 @@
   publish = "artifacts/chamcong/dist/public"
 
 [build.environment]
-  NODE_VERSION = "20"
-  PNPM_VERSION = "9"
+  NODE_VERSION = "24"
+  PNPM_VERSION = "10"
   NODE_ENV = "production"
 
 [[redirects]]

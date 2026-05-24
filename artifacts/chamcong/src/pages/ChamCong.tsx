@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Config, Shift } from "@/lib/supabase";
+import { uploadVideoToCloudinary } from "@/lib/cloudinary";
 import { Link } from "wouter";
 import {
   Camera, Send, CheckCircle, XCircle, AlertCircle,
@@ -42,44 +43,6 @@ async function retryUpload<T>(
     }
   }
   throw lastError;
-}
-
-const CLOUDINARY_CLOUD = "dtvqq32lt";
-const CLOUDINARY_PRESET = "chamcong_unsigned";
-
-// Upload video thẳng lên Cloudinary CDN (không qua backend, không nén CPU)
-// onProgress: callback nhận 0–100
-function uploadVideoToCloudinary(
-  file: File,
-  onProgress: (pct: number) => void
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", CLOUDINARY_PRESET);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/video/upload`);
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const data = JSON.parse(xhr.responseText);
-        onProgress(100);
-        resolve(data.secure_url as string);
-      } else {
-        reject(new Error(`Cloudinary lỗi ${xhr.status}: ${xhr.responseText}`));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error("Mất kết nối khi upload video lên Cloudinary."));
-    xhr.send(formData);
-  });
 }
 
 function today() {
