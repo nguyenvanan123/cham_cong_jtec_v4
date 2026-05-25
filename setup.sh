@@ -43,6 +43,13 @@ else
   echo "    ℹ️   artifacts/api-server/.env đã tồn tại (giữ nguyên)"
 fi
 
+# ── Xóa node_modules cũ (tránh lỗi native binding cross-platform) ──
+echo ""
+echo "🧹  Xóa node_modules cũ (nếu có)..."
+rm -rf node_modules
+rm -rf artifacts/chamcong/node_modules
+rm -rf artifacts/api-server/node_modules
+
 # ── Cài dependencies ─────────────────────────────
 echo ""
 echo "📦  Đang cài dependencies (pnpm install)..."
