@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import imageCompression from "browser-image-compression";
+import { parse as parseExif } from "exifr";
 import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Config, Shift } from "@/lib/supabase";
 import { Link } from "wouter";
 import {
   Camera, Send, CheckCircle, XCircle, AlertCircle,
-  Search, Megaphone, X as XIcon,
+  Search, X as XIcon,
   Upload, ImagePlus, Loader2, CheckCheck, Phone,
-  Video, Play, Clock, CalendarCheck, UserCheck
+  Video, Play, Clock, CalendarCheck, UserCheck,
+  Eye, ShieldCheck, Info
 } from "lucide-react";
 
 const STORAGE_KEY = "chamcong_last_employee";
@@ -110,7 +112,134 @@ function yesterday() {
   return d.toISOString().split("T")[0];
 }
 
+// ── Validation & Metadata Helpers ────────────────────────────────────────────
+
+const SCREENSHOT_KEYWORDS = [
+  "screenshot", "screen-shot", "screen_shot", "screencapture",
+  "screenrec", "screen-capture", "chup_man_hinh", "chụp_màn_hình",
+  "screenshoot", "printscreen",
+];
+
+async function checkMagicBytesValid(file: File, type: "image" | "video"): Promise<boolean> {
+  try {
+    const buf = await file.slice(0, 16).arrayBuffer();
+    const b = new Uint8Array(buf);
+    const isJPEG = b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF;
+    const isPNG  = b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47;
+    const isWebP = b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+                && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50;
+    const hasFtyp = b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70;
+    const isRIFF  = b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && !isWebP;
+    const isWebM  = b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3;
+    if (type === "image") return isJPEG || isPNG || isWebP || hasFtyp;
+    return hasFtyp || isRIFF || isWebM;
+  } catch { return true; }
+}
+
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    const url = URL.createObjectURL(file);
+    video.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(video.duration); };
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+    video.src = url;
+  });
+}
+
+function formatViDate(date: Date): string {
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+}
+
+async function extractImageMeta(file: File): Promise<Pick<FileMetadata, "captureTime" | "make" | "model" | "status">> {
+  try {
+    const exif = await parseExif(file, { pick: ["DateTimeOriginal", "Make", "Model"] });
+    if (!exif) return { captureTime: null, make: null, model: null, status: "Không rõ EXIF" };
+
+    let captureTime: string | null = null;
+    let status: FileMetadata["status"] = "Xác thực gốc";
+
+    const dt = exif.DateTimeOriginal;
+    let parsed: Date | null = null;
+    if (dt instanceof Date) {
+      parsed = dt;
+    } else if (typeof dt === "string") {
+      const m = dt.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+      if (m) parsed = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    }
+
+    if (parsed && !isNaN(parsed.getTime())) {
+      captureTime = formatViDate(parsed);
+      if (parsed.toDateString() !== new Date().toDateString()) status = "Không rõ EXIF";
+    } else {
+      status = "Không rõ EXIF";
+    }
+
+    return { captureTime, make: exif.Make ?? null, model: exif.Model ?? null, status };
+  } catch {
+    return { captureTime: null, make: null, model: null, status: "Không rõ EXIF" };
+  }
+}
+
+async function validateAndExtractMeta(
+  file: File,
+  type: "image" | "video"
+): Promise<{ valid: boolean; error?: string; meta?: FileMetadata }> {
+  // 1. Screenshot filename check
+  const nameLower = file.name.toLowerCase().replace(/\s+/g, "_");
+  if (SCREENSHOT_KEYWORDS.some((kw) => nameLower.includes(kw))) {
+    return { valid: false, error: "Không chấp nhận ảnh chụp màn hình. Vui lòng chụp trực tiếp bằng camera." };
+  }
+
+  // 2. Minimum size 300KB
+  if (file.size < 300 * 1024) {
+    return { valid: false, error: `File quá nhỏ (${Math.round(file.size / 1024)}KB). Yêu cầu tối thiểu 300KB — chọn ảnh/video gốc từ camera.` };
+  }
+
+  // 3. Magic bytes
+  const magicOk = await checkMagicBytesValid(file, type);
+  if (!magicOk) {
+    return { valid: false, error: "File không hợp lệ (sai định dạng). Vui lòng chọn ảnh/video thật từ thư viện." };
+  }
+
+  if (type === "video") {
+    // 4. Duration 3–10s
+    const duration = await getVideoDuration(file);
+    if (duration > 0 && (duration < 3 || duration > 10)) {
+      return { valid: false, error: `Video phải từ 3–10 giây (hiện tại: ${duration.toFixed(1)}s). Vui lòng quay lại.` };
+    }
+    return {
+      valid: true,
+      meta: {
+        captureTime: formatViDate(new Date(file.lastModified)),
+        make: null, model: null,
+        status: "Xác thực gốc",
+        fileType: "video", fileSize: file.size, duration,
+      },
+    };
+  } else {
+    const extracted = await extractImageMeta(file);
+    return {
+      valid: true,
+      meta: { ...extracted, fileType: "image", fileSize: file.size },
+    };
+  }
+}
+
 type UploadStep = 1 | 2 | "done";
+
+type FileMetadata = {
+  captureTime: string | null;
+  make: string | null;
+  model: string | null;
+  status: "Xác thực gốc" | "Không rõ EXIF" | "Không hợp lệ";
+  fileType: "image" | "video";
+  fileSize: number;
+  duration?: number;
+};
 
 type TodayStatus = {
   loading: boolean;
@@ -140,6 +269,11 @@ export default function ChamCong() {
   const [checkInVideoPreview, setCheckInVideoPreview] = useState<string | null>(null);
   const [checkOutVideoPreview, setCheckOutVideoPreview] = useState<string | null>(null);
   const [uploadMediaTab, setUploadMediaTab] = useState<"photo" | "video">("photo");
+
+  const [checkInMetadata, setCheckInMetadata] = useState<FileMetadata | null>(null);
+  const [checkOutMetadata, setCheckOutMetadata] = useState<FileMetadata | null>(null);
+  const [showMetadataPopup, setShowMetadataPopup] = useState(false);
+  const [metadataTarget, setMetadataTarget] = useState<"check-in" | "check-out">("check-in");
 
   const [uploadPopupOpen, setUploadPopupOpen] = useState(false);
   const [uploadStep, setUploadStep] = useState<UploadStep>(1);
@@ -337,6 +471,14 @@ export default function ChamCong() {
   const handleCheckInUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Validate + extract EXIF BEFORE compression (compression strips metadata)
+    const result = await validateAndExtractMeta(file, "image");
+    if (!result.valid) {
+      showToast("error", result.error!);
+      e.target.value = "";
+      return;
+    }
+    setCheckInMetadata(result.meta!);
     setCompressing(true);
     setCompressingMsg("Đang nén ảnh check-in...");
     try {
@@ -355,6 +497,13 @@ export default function ChamCong() {
   const handleCheckOutUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const result = await validateAndExtractMeta(file, "image");
+    if (!result.valid) {
+      showToast("error", result.error!);
+      e.target.value = "";
+      return;
+    }
+    setCheckOutMetadata(result.meta!);
     setCompressing(true);
     setCompressingMsg("Đang nén ảnh check-out...");
     try {
@@ -371,7 +520,7 @@ export default function ChamCong() {
     }
   };
 
-  const handleCheckInVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCheckInVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 500 * 1024 * 1024) {
@@ -379,14 +528,20 @@ export default function ChamCong() {
       e.target.value = "";
       return;
     }
+    const result = await validateAndExtractMeta(file, "video");
+    if (!result.valid) {
+      showToast("error", result.error!);
+      e.target.value = "";
+      return;
+    }
+    setCheckInMetadata(result.meta!);
     e.target.value = "";
-    // Lưu file gốc — upload thẳng lên Cloudinary khi submit, không cần nén trước
     setCheckInVideoBlob(file);
     setCheckInVideoPreview(URL.createObjectURL(file));
     setUploadStep(2);
   };
 
-  const handleCheckOutVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCheckOutVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 500 * 1024 * 1024) {
@@ -394,8 +549,14 @@ export default function ChamCong() {
       e.target.value = "";
       return;
     }
+    const result = await validateAndExtractMeta(file, "video");
+    if (!result.valid) {
+      showToast("error", result.error!);
+      e.target.value = "";
+      return;
+    }
+    setCheckOutMetadata(result.meta!);
     e.target.value = "";
-    // Lưu file gốc — upload thẳng lên Cloudinary khi submit, không cần nén trước
     setCheckOutVideoBlob(file);
     setCheckOutVideoPreview(URL.createObjectURL(file));
     setUploadStep("done");
@@ -415,6 +576,8 @@ export default function ChamCong() {
     if (checkOutVideoPreview) URL.revokeObjectURL(checkOutVideoPreview);
     setCheckInVideoPreview(null);
     setCheckOutVideoPreview(null);
+    setCheckInMetadata(null);
+    setCheckOutMetadata(null);
     setUploadStep(1);
   };
 
@@ -507,12 +670,16 @@ export default function ChamCong() {
             employee_id: eid, full_name: fullName.trim(), work_date: workDate,
             ...(isOvernightCI && workDateEnd ? { work_date_end: workDateEnd } : {}),
             shift, action_type: "check-in", image_url: ciImageUrl, video_url: ciVideoUrl,
+            ...(checkInMetadata ? { file_metadata: JSON.stringify(checkInMetadata) } : {}),
           };
           let { error } = await supabase.from("attendance").insert(payload);
-          // Retry không có work_date_end nếu cột chưa tồn tại trong DB
           if (error?.message?.includes("work_date_end") || (error?.message?.includes("column") && error.message.includes("does not exist"))) {
             const { work_date_end: _, ...payloadNoEnd } = payload;
             ({ error } = await supabase.from("attendance").insert(payloadNoEnd));
+          }
+          if (error?.message?.includes("file_metadata")) {
+            const { file_metadata: _, ...payloadNoMeta } = payload;
+            ({ error } = await supabase.from("attendance").insert(payloadNoMeta));
           }
           if (error) throw new Error("Lỗi lưu check-in: " + error.message);
         })());
@@ -531,12 +698,16 @@ export default function ChamCong() {
             employee_id: eid, full_name: fullName.trim(), work_date: workDate,
             ...(isOvernightCO && workDateEnd ? { work_date_end: workDateEnd } : {}),
             shift, action_type: "check-out", image_url: coImageUrl, video_url: coVideoUrl,
+            ...(checkOutMetadata ? { file_metadata: JSON.stringify(checkOutMetadata) } : {}),
           };
           let { error } = await supabase.from("attendance").insert(payload);
-          // Retry không có work_date_end nếu cột chưa tồn tại trong DB
           if (error?.message?.includes("work_date_end") || (error?.message?.includes("column") && error.message.includes("does not exist"))) {
             const { work_date_end: _, ...payloadNoEnd } = payload;
             ({ error } = await supabase.from("attendance").insert(payloadNoEnd));
+          }
+          if (error?.message?.includes("file_metadata")) {
+            const { file_metadata: _, ...payloadNoMeta } = payload;
+            ({ error } = await supabase.from("attendance").insert(payloadNoMeta));
           }
           if (error) throw new Error("Lỗi lưu check-out: " + error.message);
         })());
@@ -841,6 +1012,40 @@ export default function ChamCong() {
                     </div>
                   </div>
                 </div>
+                {/* Data Information badge */}
+                {(checkInMetadata || checkOutMetadata) && (
+                  <div className="bg-gradient-to-r from-slate-50 to-blue-50 rounded-xl border border-blue-100 p-3">
+                    <div className="flex items-center gap-1.5 mb-2.5">
+                      <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center">
+                        <Info size={11} className="text-blue-600" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Data Information</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {checkInMetadata && (
+                        <button
+                          type="button"
+                          onClick={() => { setMetadataTarget("check-in"); setShowMetadataPopup(true); }}
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 active:scale-95 transition-all shadow-sm"
+                        >
+                          <Eye size={12} />
+                          👁️ Check-in
+                        </button>
+                      )}
+                      {checkOutMetadata && (
+                        <button
+                          type="button"
+                          onClick={() => { setMetadataTarget("check-out"); setShowMetadataPopup(true); }}
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm"
+                        >
+                          <Eye size={12} />
+                          👁️ Check-out
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="button"
                   onClick={() => openUploadPopup()}
@@ -1130,7 +1335,7 @@ export default function ChamCong() {
                 <XIcon size={16} className="text-white" />
               </button>
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-3">
-                <Megaphone size={20} className="text-white" />
+                <Info size={20} className="text-white" />
               </div>
               <h3 className="text-white font-bold text-lg leading-tight">{popupTitle}</h3>
             </div>
@@ -1158,6 +1363,93 @@ export default function ChamCong() {
           </div>
         </div>
       )}
+
+      {/* ── Metadata Detail Popup ──────────────────────────────────────────── */}
+      {showMetadataPopup && (() => {
+        const meta = metadataTarget === "check-in" ? checkInMetadata : checkOutMetadata;
+        if (!meta) return null;
+        const isVerified = meta.status === "Xác thực gốc";
+        const rows: { label: string; value: string; icon: React.ElementType }[] = [
+          { label: "Ngày giờ chụp thực tế", value: meta.captureTime ?? "Không có dữ liệu EXIF", icon: Clock },
+          { label: "Hãng sản xuất thiết bị", value: meta.make ?? "Không xác định", icon: Phone },
+          { label: "Dòng máy điện thoại", value: meta.model ?? "Không xác định", icon: Phone },
+          { label: "Kích thước file", value: meta.fileSize >= 1024 * 1024 ? `${(meta.fileSize / 1024 / 1024).toFixed(1)} MB` : `${Math.round(meta.fileSize / 1024)} KB`, icon: Info },
+          ...(meta.duration ? [{ label: "Thời lượng video", value: `${meta.duration.toFixed(1)} giây`, icon: Video }] : []),
+        ];
+        return (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowMetadataPopup(false)}
+          >
+            <div
+              className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 pt-5 pb-4 relative">
+                <button
+                  onClick={() => setShowMetadataPopup(false)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
+                >
+                  <XIcon size={16} className="text-white" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 bg-white/15 rounded-xl flex items-center justify-center">
+                    {meta.fileType === "video"
+                      ? <Video size={22} className="text-white" />
+                      : <ImagePlus size={22} className="text-white" />
+                    }
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-base leading-tight">Thông tin dữ liệu</h3>
+                    <p className="text-white/60 text-xs mt-0.5">
+                      {metadataTarget === "check-in" ? "Check-in" : "Check-out"} &bull; {meta.fileType === "video" ? "Video" : "Ảnh"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status badge */}
+              <div className="px-5 pt-4 pb-2">
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+                  isVerified
+                    ? "bg-green-50 text-green-700 border-green-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}>
+                  <ShieldCheck size={12} />
+                  Trạng thái kiểm tra: {meta.status}
+                </div>
+              </div>
+
+              {/* Metadata rows */}
+              <div className="px-5 pb-4 space-y-2">
+                {rows.map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="w-7 h-7 rounded-lg bg-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Icon size={13} className="text-slate-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-500 font-medium leading-tight">{label}</p>
+                      <p className="text-sm font-semibold text-slate-800 mt-0.5 break-words">{value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Close button */}
+              <div className="px-5 pb-5">
+                <button
+                  type="button"
+                  onClick={() => setShowMetadataPopup(false)}
+                  className="w-full py-3 rounded-xl bg-slate-800 text-white font-semibold text-sm hover:bg-slate-700 active:scale-[0.98] transition-all"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

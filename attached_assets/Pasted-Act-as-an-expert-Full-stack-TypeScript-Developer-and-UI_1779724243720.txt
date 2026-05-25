@@ -1,0 +1,29 @@
+Act as an expert Full-stack TypeScript Developer and UI/UX Designer. Upgrade my React TSX attendance system to handle BOTH image and video uploads from the gallery, extract their hardware/time metadata, and display them in a premium detailed popup.
+
+Please implement the following features in the React TSX component:
+
+1. METADATA EXTRACTION & STATE STORAGE
+- When an image or video is uploaded, extract the following 4 key pieces of metadata:
+  a) Actual Capture/Record Date & Time (from EXIF DateTimeOriginal or Video creation_time).
+  b) Device Manufacturer (Make).
+  c) Device Model.
+  d) File Status (Verified Original / Failed).
+- Store these extracted metadata fields into a React state object (e.g., `fileMetadata`).
+- (Maintain previous validation layers: check today's date match, ban 'screenshot' filenames, block wrong magic bytes, enforce 3-10s video duration, and minimum 300KB size).
+
+2. MAIN INTERFACE UPGRADE (Tailwind CSS)
+- Next to the Image/Video preview container, add a "Data Information" badge.
+- Inside this section, add a beautiful, clear button: "👁️ Xem chi tiết thông tin" (View Details Button).
+- This button should ONLY be clickable after a file is successfully uploaded and verified.
+
+3. THE PREMIUM DETAIL POPUP (MODAL UX)
+- Clicking the "Xem chi tiết thông tin" button must trigger a beautiful, centered Popup (Modal) over the screen with a dark backdrop blur effect (`backdrop-blur-sm`).
+- Inside the Popup, display the extracted hardware and time metadata in a clean, professional grid table:
+  - Ngày giờ chụp thực tế (Original Capture Time)
+  - Hãng sản xuất thiết bị (Device Manufacturer)
+  - Dòng máy điện thoại (Device Model)
+  - Trạng thái kiểm tra (Verification Status - Secure Green Badge)
+- At the top-right corner or bottom of the Popup, add a prominent, stylized "X" button. Clicking this "X" button must instantly close the popup.
+
+4. SERVER SUBMISSION PREPARATION
+- Ensure that when the "Submit Attendance" button is clicked, the app is prepared to send BOTH the file and the extracted metadata object (Capture Time, Make, Model) to the backend.
