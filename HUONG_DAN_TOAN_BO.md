@@ -99,26 +99,48 @@ const CLOUDINARY_PRESET = "chamcong_unsigned";
 
 ### A3. Tạo file môi trường
 
-Cần tạo **2 file `.env`** (không commit lên git):
+> ⚠️ **Đây là bước hay bị bỏ qua nhất — nếu thiếu sẽ báo lỗi ngay khi khởi động.**
 
-#### File 1 — Frontend: `artifacts/chamcong/.env`
+Trong thư mục dự án đã có sẵn 2 file **`.env.example`** làm mẫu. Bạn chỉ cần **sao chép** và **điền thông tin thật**:
+
+#### Bước 1 — Sao chép file mẫu
+
+Mở Terminal trong VS Code (Ctrl + `` ` ``) và chạy:
+
+```bash
+cp artifacts/chamcong/.env.example artifacts/chamcong/.env
+cp artifacts/api-server/.env.example artifacts/api-server/.env
+```
+
+> **Windows** dùng lệnh: `copy` thay vì `cp`
+> ```cmd
+> copy artifacts\chamcong\.env.example artifacts\chamcong\.env
+> copy artifacts\api-server\.env.example artifacts\api-server\.env
+> ```
+
+#### Bước 2 — Điền thông tin vào `artifacts/chamcong/.env`
+
+Mở file vừa tạo, thay các giá trị `YOUR_...` bằng thông tin từ Supabase:
 
 ```env
-VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_YOUR_ANON_KEY
+VITE_SUPABASE_URL=https://abcxyz.supabase.co        ← Project URL
+VITE_SUPABASE_ANON_KEY=sb_publishable_eyJ...         ← anon / public key
 PORT=5000
 BASE_PATH=/
 ```
 
-#### File 2 — API Server: `artifacts/api-server/.env`
+#### Bước 3 — Điền thông tin vào `artifacts/api-server/.env`
 
 ```env
 PORT=8080
-VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+VITE_SUPABASE_URL=https://abcxyz.supabase.co         ← Project URL (giống trên)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1...        ← service_role key (secret!)
 ```
 
-> Thay `YOUR_PROJECT`, `YOUR_ANON_KEY`, `YOUR_SERVICE_ROLE_KEY` bằng giá trị từ Supabase Dashboard.
+> **Lấy thông tin ở đâu?** Supabase Dashboard → chọn project → **Project Settings** (icon bánh răng) → **API**
+> - `Project URL` → điền vào `VITE_SUPABASE_URL` (cả 2 file)
+> - `anon / public` → điền vào `VITE_SUPABASE_ANON_KEY`
+> - `service_role` → điền vào `SUPABASE_SERVICE_ROLE_KEY` (**giữ bí mật!**)
 
 ### A4. Cài dependencies
 
