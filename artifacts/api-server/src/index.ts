@@ -1,3 +1,6 @@
+import { config } from "dotenv";
+config(); // Load .env nếu có (local dev), bỏ qua nếu không có (production)
+
 import app from "./app";
 import { logger } from "./lib/logger";
 
