@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import type { AttendanceRecord, Shift, Reconciliation } from "@/lib/supabase";
 import { detectDayType, getDayOfWeekShort, getAutoReason } from "@/lib/vn-holidays";
 import { X, CheckCircle, Clock, Banknote, CalendarCheck, RefreshCw, Search, Save, AlertCircle, ZoomIn, Play } from "lucide-react";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import type { LightboxImage } from "@/components/ui/ImageLightbox";
 
 type Group = {
   employee_id: string;
@@ -125,7 +127,8 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
   const [workDateEnd, setWorkDateEnd] = useState("");
   const [workDateEnds, setWorkDateEnds] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [lightboxImg, setLightboxImg] = useState<string | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxVideo, setLightboxVideo] = useState<string | null>(null);
 
   const loadShifts = useCallback(async () => {
@@ -604,7 +607,14 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
                   <div key={label} className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground">{label}</p>
                     {img ? (
-                      <div className="relative group cursor-pointer" onClick={() => setLightboxImg(img)}>
+                      <div className="relative group cursor-pointer" onClick={() => {
+                        const imgs: LightboxImage[] = [];
+                        if (selected.checkIn?.image_url) imgs.push({ url: selected.checkIn.image_url, label: `Check-in — ${selected.full_name}` });
+                        if (selected.checkOut?.image_url) imgs.push({ url: selected.checkOut.image_url, label: `Check-out — ${selected.full_name}` });
+                        const clickedIdx = label === "Check-in" ? 0 : (selected.checkIn?.image_url ? 1 : 0);
+                        setLightboxImages(imgs);
+                        setLightboxIndex(Math.min(clickedIdx, imgs.length - 1));
+                      }}>
                         <img src={getOptimizedUrl(img)} alt={label} className={`w-full aspect-video object-cover rounded-xl border-2 ${imgBorder}`} />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center">
                           <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -868,24 +878,12 @@ export function ReconciliationTab({ allRecords }: { allRecords: AttendanceRecord
         </div>
       )}
 
-      {lightboxImg && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
-          onClick={() => setLightboxImg(null)}
-        >
-          <button
-            onClick={() => setLightboxImg(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition"
-          >
-            <X size={20} className="text-white" />
-          </button>
-          <img
-            src={getOptimizedUrl(lightboxImg)}
-            alt="Phóng to"
-            className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-        </div>
+      {lightboxImages.length > 0 && (
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxImages([])}
+        />
       )}
 
       {lightboxVideo && (

@@ -19,6 +19,8 @@ import { ShiftsTab } from "@/components/admin/ShiftsTab";
 import { ReconciliationTab } from "@/components/admin/ReconciliationTab";
 import { ExportTab } from "@/components/admin/ExportTab";
 import { CleanupTab } from "@/components/admin/CleanupTab";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import type { LightboxImage } from "@/components/ui/ImageLightbox";
 
 // ──────────────────────────────────────────────────────
 // Types
@@ -258,9 +260,8 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
   const [filterShift, setFilterShift] = useState("");
   const [dbShifts, setDbShifts] = useState<Shift[]>([]);
-  const [modalImage, setModalImage] = useState<string | null>(null);
-  const [modalImageZoomed, setModalImageZoomed] = useState(false);
-  const [modalImageLabel, setModalImageLabel] = useState<string>("");
+  const [lightboxImages, setLightboxImages] = useState<LightboxImage[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [modalVideo, setModalVideo] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -276,9 +277,7 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setModalImage(null);
         setModalVideo(null);
-        setModalImageZoomed(false);
       }
     };
     window.addEventListener("keydown", handler);
@@ -438,7 +437,10 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
                         <td className="px-4 py-3">
                           <div className="flex gap-1 flex-wrap">
                             {images.map((img, i) => (
-                              <button key={i} onClick={() => { setModalImage(img.url); setModalImageLabel(`Ảnh ${img.type} — ${g.full_name}`); setModalImageZoomed(false); }}
+                              <button key={i} onClick={() => {
+                                setLightboxImages(images.map(im => ({ url: im.url, label: `Ảnh ${im.type} — ${g.full_name}` })));
+                                setLightboxIndex(i);
+                              }}
                                 className="relative w-8 h-8 rounded-lg overflow-hidden border border-border hover:ring-2 hover:ring-primary/40 transition group">
                                 <img src={getOptimizedUrl(img.url)} alt="ảnh" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
@@ -481,49 +483,13 @@ function RecordsTab({ allRecords, onRefresh }: { allRecords: AttendanceRecord[];
         )}
       </div>
 
-      {/* Image Modal — full HD lightbox */}
-      {modalImage && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center" onClick={() => { setModalImage(null); setModalImageZoomed(false); }}>
-          {/* Toolbar */}
-          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10" onClick={e => e.stopPropagation()}>
-            <span className="text-white text-sm font-medium truncate">{modalImageLabel}</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setModalImageZoomed(z => !z)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
-              >
-                <Search size={13} />
-                {modalImageZoomed ? "Thu nhỏ" : "Phóng to 100%"}
-              </button>
-              <a
-                href={modalImage}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-medium transition"
-                onClick={e => e.stopPropagation()}
-              >
-                <Download size={13} />
-                Tải xuống
-              </a>
-              <button onClick={() => { setModalImage(null); setModalImageZoomed(false); }} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
-                <X size={16} className="text-white" />
-              </button>
-            </div>
-          </div>
-          {/* Image */}
-          <div
-            className={`relative flex items-center justify-center w-full h-full p-16 ${modalImageZoomed ? "overflow-auto cursor-zoom-out" : "cursor-zoom-in"}`}
-            onClick={e => { e.stopPropagation(); setModalImageZoomed(z => !z); }}
-          >
-            <img
-              src={getOptimizedUrl(modalImage)}
-              alt="Ảnh chấm công"
-              className={`rounded-xl shadow-2xl transition-all duration-200 ${modalImageZoomed ? "max-w-none w-auto" : "max-w-full max-h-[80vh] object-contain"}`}
-            />
-          </div>
-          <p className="absolute bottom-4 text-white/50 text-xs">Nhấn ảnh để phóng to • ESC để đóng</p>
-        </div>
+      {/* Image Lightbox */}
+      {lightboxImages.length > 0 && (
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxImages([])}
+        />
       )}
 
       {/* Video Modal — full HD */}
