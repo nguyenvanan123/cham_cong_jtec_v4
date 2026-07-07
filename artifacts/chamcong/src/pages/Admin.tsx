@@ -886,6 +886,8 @@ function SettingsTab() {
   const [msgPw, setMsgPw] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [msgBanner, setMsgBanner] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [showPw, setShowPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   // Popup state
   const [popupStatus, setPopupStatus] = useState("off");
   const [popupTitle, setPopupTitle] = useState("");
@@ -1177,13 +1179,23 @@ ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS referrer_bank_name TEXT DE
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Mật khẩu mới</label>
-            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mật khẩu mới..."
-              className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+            <div className="relative">
+              <input type={showNewPw ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mật khẩu mới..."
+                className="w-full px-3 py-2.5 pr-9 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+              <button type="button" onClick={() => setShowNewPw(s => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showNewPw ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">Xác nhận mật khẩu mới</label>
-            <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Nhập lại..."
-              className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+            <div className="relative">
+              <input type={showConfirmPw ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Nhập lại..."
+                className="w-full px-3 py-2.5 pr-9 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 transition" />
+              <button type="button" onClick={() => setShowConfirmPw(s => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showConfirmPw ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
           </div>
           {msgPw && (
             <p className={`text-xs flex items-center gap-1 ${msgPw.type === "ok" ? "text-green-600" : "text-red-500"}`}>
