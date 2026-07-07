@@ -924,7 +924,6 @@ function SettingsTab() {
       .then(({ data }) => {
         if (!data) return;
         const get = (key: string) => (data as { key: string; value: string }[]).find(d => d.key === key)?.value ?? "";
-        setAdminPassword(get("admin_password"));
         setBannerUrl(get("banner_url"));
         setBannerStatus(get("banner_status") || "off");
         setPopupStatus(get("popup_status") || "off");
@@ -950,18 +949,18 @@ function SettingsTab() {
     e.preventDefault();
     if (newPassword !== confirmPassword) { setMsgPw({ type: "err", text: "Mật khẩu xác nhận không khớp." }); return; }
     if (newPassword.length < 8) { setMsgPw({ type: "err", text: "Mật khẩu mới phải có ít nhất 8 ký tự." }); return; }
-    if (adminPassword) {
-      const { data } = await supabase.from("configs").select("value").eq("key", "admin_password").single();
-      const stored = data?.value ?? "";
-      const hashedCurrent = await sha256(adminPassword);
-      const match = stored === hashedCurrent || stored === adminPassword;
-      if (!match) { setMsgPw({ type: "err", text: "Mật khẩu hiện tại không đúng." }); return; }
-    }
+    if (!adminPassword) { setMsgPw({ type: "err", text: "Vui lòng nhập mật khẩu hiện tại." }); return; }
+    const { data } = await supabase.from("configs").select("value").eq("key", "admin_password").single();
+    const stored = data?.value ?? "";
+    const hashedCurrent = await sha256(adminPassword);
+    const isHashMatch = stored === hashedCurrent;
+    const isLegacyPlain = stored === adminPassword && stored.length < 64;
+    if (!isHashMatch && !isLegacyPlain) { setMsgPw({ type: "err", text: "Mật khẩu hiện tại không đúng." }); return; }
     setSavingPw(true);
     const hashedNew = await sha256(newPassword);
     await supabase.from("configs").upsert({ key: "admin_password", value: hashedNew }, { onConflict: "key" });
     setMsgPw({ type: "ok", text: "Đổi mật khẩu thành công! Mật khẩu đã được mã hoá SHA-256." });
-    setAdminPassword(newPassword); setNewPassword(""); setConfirmPassword("");
+    setAdminPassword(""); setNewPassword(""); setConfirmPassword("");
     setSavingPw(false);
     setTimeout(() => setMsgPw(null), 4000);
   };
